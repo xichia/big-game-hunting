@@ -9,7 +9,7 @@ set -euo pipefail
 # Never modifies source-of-truth files. Never commits generated artifacts.
 #
 # Usage:
-#   DEEPSEEK_API_KEY=sk-... ./scripts/run-deepseek-bulk-ideation.sh
+#   DEEPSEEK_API_KEY=<API_KEY> ./scripts/run-deepseek-bulk-ideation.sh
 #
 # Examples:
 #   # Dry run — print what would be done without calling the API
