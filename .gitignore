@@ -24,3 +24,5 @@ build/
 *.log
 .tmp/
 .cache/
+
+logs/
