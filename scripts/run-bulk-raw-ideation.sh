@@ -33,17 +33,16 @@ set -euo pipefail
 #     LLM_API_KEY=<API_KEY> \
 #     ./scripts/run-bulk-raw-ideation.sh
 #
-# Note on reasoning effort:
-# OpenCode UI may show "low" for DeepSeek V4 Flash, but the raw Chat Completions
-# endpoint may reject reasoning_effort=low. For bulk ideation, omit reasoning_effort
-# and rely on the Flash model for fast/cheap generation.
+# Note:
+# Bulk raw ideation uses DeepSeek V4 Flash in non-thinking mode because thinking
+# mode can consume the output budget in reasoning_content and return empty content.
 #
 # Environment variables (all optional except OPENCODE_GO_API_KEY / LLM_API_KEY):
 #   LLM_API_KEY           API key (takes precedence over OPENCODE_GO_API_KEY)
 #   OPENCODE_GO_API_KEY   OpenCode Go API key (fallback)
 #   LLM_BASE_URL          API endpoint (default: https://opencode.ai/zen/go/v1/chat/completions)
 #   MODEL                 Model name (default: deepseek-v4-flash)
-#   REASONING_EFFORT      Reasoning effort (default: empty — field omitted from request; supported: empty, high, max)
+#   (thinking is always disabled — see Note above)
 #   BATCHES               Number of batches (default: 5; range 3-10 for 100-300 concepts)
 #   CONCEPTS_PER_BATCH    Concepts per batch (default: 30)
 #   OUTPUT_DIR            Artifact output directory (default: artifacts/research)
@@ -63,7 +62,6 @@ set -euo pipefail
 : "${SLEEP_SECONDS:=5}"
 : "${MAX_RETRIES:=3}"
 : "${FORCE:=0}"
-: "${REASONING_EFFORT:=}"
 : "${DRY_RUN:=0}"
 
 # API key resolution: LLM_API_KEY > OPENCODE_GO_API_KEY > error
@@ -91,12 +89,6 @@ if [ "$BATCHES" -lt 1 ] || [ "$BATCHES" -gt 50 ]; then
 fi
 if [ "$CONCEPTS_PER_BATCH" -lt 1 ] || [ "$CONCEPTS_PER_BATCH" -gt 100 ]; then
   echo "ERROR: CONCEPTS_PER_BATCH must be between 1 and 100 (got $CONCEPTS_PER_BATCH)" >&2
-  exit 1
-fi
-
-# Validate REASONING_EFFORT (empty, high, or max)
-if [ -n "$REASONING_EFFORT" ] && [ "$REASONING_EFFORT" != "high" ] && [ "$REASONING_EFFORT" != "max" ]; then
-  echo "ERROR: Unsupported REASONING_EFFORT='${REASONING_EFFORT}'. Use empty, high, or max." >&2
   exit 1
 fi
 
@@ -233,44 +225,27 @@ call_llm() {
 
     response_file="$(mktemp)"
 
-    # Build JSON payload with jq to avoid heredoc nesting and quoting issues
-    # Only include reasoning_effort when explicitly set to a supported value
+    # Build JSON payload with jq to avoid heredoc nesting and quoting issues.
+    # Bulk raw ideation uses DeepSeek V4 Flash in non-thinking mode because
+    # thinking mode can consume the output budget in reasoning_content and
+    # return empty content.
     local payload
-    if [ -n "$REASONING_EFFORT" ]; then
-      payload="$(jq -n \
-        --arg model "$MODEL" \
-        --arg reasoning_effort "$REASONING_EFFORT" \
-        --arg system "$system_message" \
-        --arg user "$user_message" \
-        '{
-          model: $model,
-          messages: [
-            {role: "system", content: $system},
-            {role: "user", content: $user}
-          ],
-          temperature: 0.9,
-          max_tokens: 8192,
-          stream: false,
-          reasoning_effort: $reasoning_effort
-        }'
-      )"
-    else
-      payload="$(jq -n \
-        --arg model "$MODEL" \
-        --arg system "$system_message" \
-        --arg user "$user_message" \
-        '{
-          model: $model,
-          messages: [
-            {role: "system", content: $system},
-            {role: "user", content: $user}
-          ],
-          temperature: 0.9,
-          max_tokens: 8192,
-          stream: false
-        }'
-      )"
-    fi
+    payload="$(jq -n \
+      --arg model "$MODEL" \
+      --arg system "$system_message" \
+      --arg user "$user_message" \
+      '{
+        model: $model,
+        messages: [
+          {role: "system", content: $system},
+          {role: "user", content: $user}
+        ],
+        temperature: 0.9,
+        max_tokens: 8192,
+        stream: false,
+        thinking: {type: "disabled"}
+      }'
+    )"
 
     http_code="$(curl -s -o "$response_file" -w '%{http_code}' \
       "${LLM_BASE_URL}" \
@@ -288,6 +263,11 @@ call_llm() {
       rm -f "$response_file"
 
       if [ "$content" = "null" ] || [ -z "$content" ]; then
+        local reasoning_content
+        reasoning_content="$(echo "$raw_body" | jq -r '.choices[0].message.reasoning_content' 2>/dev/null || true)"
+        if [ -n "$reasoning_content" ] && [ "$reasoning_content" != "null" ]; then
+          warn "Received reasoning_content but empty content; thinking mode may still be enabled."
+        fi
         local redacted_body
         redacted_body="$(redact_keys "$raw_body")"
         local ts
@@ -348,11 +328,7 @@ generate_batch() {
     log "[DRY RUN] Would call LLM API with:"
     log "[DRY RUN]   URL: ${LLM_BASE_URL}"
     log "[DRY RUN]   Model: ${MODEL}"
-    if [ -n "$REASONING_EFFORT" ]; then
-      log "[DRY RUN]   Reasoning effort: ${REASONING_EFFORT}"
-    else
-      log "[DRY RUN]   Reasoning effort: (omitted)"
-    fi
+    log "[DRY RUN]   Thinking: disabled"
     log "[DRY RUN]   System prompt: ${PROMPTS_DIR}/bulk-raw-ideation-system.md + project context"
     log "[DRY RUN]   User prompt: ${PROMPTS_DIR}/bulk-raw-ideation-user.md (batch ${batch_number}, ${concept_count} concepts)"
     log "[DRY RUN]   Context files (${#CONTEXT_FILES[@]}):"
@@ -448,11 +424,7 @@ main() {
   log "=== Big Game Hunting — Bulk Raw Ideation Pass ==="
   log "Endpoint: ${LLM_BASE_URL}"
   log "Model: ${MODEL}"
-  if [ -n "$REASONING_EFFORT" ]; then
-    log "Reasoning effort: ${REASONING_EFFORT}"
-  else
-    log "Reasoning effort: (omitted)"
-  fi
+  log "Thinking: disabled"
   log "Batches: ${BATCHES}"
   log "Concepts per batch: ${CONCEPTS_PER_BATCH}"
   log "Total concepts (planned): ${TOTAL_CONCEPTS}"
