@@ -1,1 +1,1 @@
-pbpaste > /tmp/bgh-roadmap.md
+cat workflows/big-game-hunting-roadmap.md
