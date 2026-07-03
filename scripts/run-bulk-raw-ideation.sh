@@ -27,6 +27,10 @@ set -euo pipefail
 #   # Force re-run of all batches (overwrite existing files)
 #   FORCE=1 ./scripts/run-bulk-raw-ideation.sh
 #
+#   # Overnight run with explicit low reasoning effort
+#   REASONING_EFFORT=low BATCHES=10 CONCEPTS_PER_BATCH=30 \
+#     ./scripts/run-bulk-raw-ideation.sh
+#
 #   # Custom endpoint and model
 #   LLM_BASE_URL="https://api.example.com/v1/chat/completions" \
 #     MODEL="gpt-4o" \
@@ -38,6 +42,7 @@ set -euo pipefail
 #   OPENCODE_GO_API_KEY   OpenCode Go API key (fallback)
 #   LLM_BASE_URL          API endpoint (default: https://opencode.ai/zen/go/v1/chat/completions)
 #   MODEL                 Model name (default: deepseek-v4-flash)
+#   REASONING_EFFORT      Reasoning effort for OpenCode Go (default: low; passed as reasoning_effort in request body)
 #   BATCHES               Number of batches (default: 5; range 3-10 for 100-300 concepts)
 #   CONCEPTS_PER_BATCH    Concepts per batch (default: 30)
 #   OUTPUT_DIR            Artifact output directory (default: artifacts/research)
@@ -57,6 +62,7 @@ set -euo pipefail
 : "${SLEEP_SECONDS:=5}"
 : "${MAX_RETRIES:=3}"
 : "${FORCE:=0}"
+: "${REASONING_EFFORT:=low}"
 : "${DRY_RUN:=0}"
 
 # API key resolution: LLM_API_KEY > OPENCODE_GO_API_KEY > error
@@ -208,6 +214,7 @@ call_llm() {
     local payload
     payload="$(jq -n \
       --arg model "$MODEL" \
+      --arg reasoning_effort "$REASONING_EFFORT" \
       --arg system "$system_message" \
       --arg user "$user_message" \
       '{
@@ -218,7 +225,8 @@ call_llm() {
         ],
         temperature: 0.9,
         max_tokens: 8192,
-        stream: false
+        stream: false,
+        reasoning_effort: $reasoning_effort
       }'
     )"
 
@@ -289,6 +297,7 @@ generate_batch() {
     log "[DRY RUN] Would call LLM API with:"
     log "[DRY RUN]   URL: ${LLM_BASE_URL}"
     log "[DRY RUN]   Model: ${MODEL}"
+    log "[DRY RUN]   Reasoning effort: ${REASONING_EFFORT}"
     log "[DRY RUN]   System prompt: ${PROMPTS_DIR}/bulk-raw-ideation-system.md + project context"
     log "[DRY RUN]   User prompt: ${PROMPTS_DIR}/bulk-raw-ideation-user.md (batch ${batch_number}, ${concept_count} concepts)"
     log "[DRY RUN]   Context files (${#CONTEXT_FILES[@]}):"
@@ -384,6 +393,7 @@ main() {
   log "=== Big Game Hunting — Bulk Raw Ideation Pass ==="
   log "Endpoint: ${LLM_BASE_URL}"
   log "Model: ${MODEL}"
+  log "Reasoning effort: ${REASONING_EFFORT}"
   log "Batches: ${BATCHES}"
   log "Concepts per batch: ${CONCEPTS_PER_BATCH}"
   log "Total concepts (planned): ${TOTAL_CONCEPTS}"
