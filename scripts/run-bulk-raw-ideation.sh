@@ -27,22 +27,23 @@ set -euo pipefail
 #   # Force re-run of all batches (overwrite existing files)
 #   FORCE=1 ./scripts/run-bulk-raw-ideation.sh
 #
-#   # Overnight run with explicit low reasoning effort
-#   REASONING_EFFORT=low BATCHES=10 CONCEPTS_PER_BATCH=30 \
-#     ./scripts/run-bulk-raw-ideation.sh
-#
 #   # Custom endpoint and model
 #   LLM_BASE_URL="https://api.example.com/v1/chat/completions" \
 #     MODEL="gpt-4o" \
 #     LLM_API_KEY=<API_KEY> \
 #     ./scripts/run-bulk-raw-ideation.sh
 #
+# Note on reasoning effort:
+# OpenCode UI may show "low" for DeepSeek V4 Flash, but the raw Chat Completions
+# endpoint may reject reasoning_effort=low. For bulk ideation, omit reasoning_effort
+# and rely on the Flash model for fast/cheap generation.
+#
 # Environment variables (all optional except OPENCODE_GO_API_KEY / LLM_API_KEY):
 #   LLM_API_KEY           API key (takes precedence over OPENCODE_GO_API_KEY)
 #   OPENCODE_GO_API_KEY   OpenCode Go API key (fallback)
 #   LLM_BASE_URL          API endpoint (default: https://opencode.ai/zen/go/v1/chat/completions)
 #   MODEL                 Model name (default: deepseek-v4-flash)
-#   REASONING_EFFORT      Reasoning effort for OpenCode Go (default: low; passed as reasoning_effort in request body)
+#   REASONING_EFFORT      Reasoning effort (default: empty — field omitted from request; supported: empty, high, max)
 #   BATCHES               Number of batches (default: 5; range 3-10 for 100-300 concepts)
 #   CONCEPTS_PER_BATCH    Concepts per batch (default: 30)
 #   OUTPUT_DIR            Artifact output directory (default: artifacts/research)
@@ -62,7 +63,7 @@ set -euo pipefail
 : "${SLEEP_SECONDS:=5}"
 : "${MAX_RETRIES:=3}"
 : "${FORCE:=0}"
-: "${REASONING_EFFORT:=low}"
+: "${REASONING_EFFORT:=}"
 : "${DRY_RUN:=0}"
 
 # API key resolution: LLM_API_KEY > OPENCODE_GO_API_KEY > error
@@ -90,6 +91,12 @@ if [ "$BATCHES" -lt 1 ] || [ "$BATCHES" -gt 50 ]; then
 fi
 if [ "$CONCEPTS_PER_BATCH" -lt 1 ] || [ "$CONCEPTS_PER_BATCH" -gt 100 ]; then
   echo "ERROR: CONCEPTS_PER_BATCH must be between 1 and 100 (got $CONCEPTS_PER_BATCH)" >&2
+  exit 1
+fi
+
+# Validate REASONING_EFFORT (empty, high, or max)
+if [ -n "$REASONING_EFFORT" ] && [ "$REASONING_EFFORT" != "high" ] && [ "$REASONING_EFFORT" != "max" ]; then
+  echo "ERROR: Unsupported REASONING_EFFORT='${REASONING_EFFORT}'. Use empty, high, or max." >&2
   exit 1
 fi
 
@@ -197,6 +204,22 @@ build_system_message() {
   done
 }
 
+# Redact anything that looks like an API key from a string
+redact_keys() {
+  echo "$1" | sed 's/[A-Za-z0-9_-]\{20,\}/***/g'
+}
+
+# Save a failed response body to logs/ for debugging (API key redacted)
+save_failed_response() {
+  local body="$1"
+  local suffix="$2"
+  local log_dir="${PROJECT_DIR}/logs"
+  mkdir -p "$log_dir"
+  local dest="${log_dir}/failed-response-${suffix}.json"
+  echo "$body" > "$dest"
+  warn "Saved raw response to ${dest}"
+}
+
 # Call the LLM API with retry logic
 call_llm() {
   local system_message="$1"
@@ -211,24 +234,43 @@ call_llm() {
     response_file="$(mktemp)"
 
     # Build JSON payload with jq to avoid heredoc nesting and quoting issues
+    # Only include reasoning_effort when explicitly set to a supported value
     local payload
-    payload="$(jq -n \
-      --arg model "$MODEL" \
-      --arg reasoning_effort "$REASONING_EFFORT" \
-      --arg system "$system_message" \
-      --arg user "$user_message" \
-      '{
-        model: $model,
-        messages: [
-          {role: "system", content: $system},
-          {role: "user", content: $user}
-        ],
-        temperature: 0.9,
-        max_tokens: 8192,
-        stream: false,
-        reasoning_effort: $reasoning_effort
-      }'
-    )"
+    if [ -n "$REASONING_EFFORT" ]; then
+      payload="$(jq -n \
+        --arg model "$MODEL" \
+        --arg reasoning_effort "$REASONING_EFFORT" \
+        --arg system "$system_message" \
+        --arg user "$user_message" \
+        '{
+          model: $model,
+          messages: [
+            {role: "system", content: $system},
+            {role: "user", content: $user}
+          ],
+          temperature: 0.9,
+          max_tokens: 8192,
+          stream: false,
+          reasoning_effort: $reasoning_effort
+        }'
+      )"
+    else
+      payload="$(jq -n \
+        --arg model "$MODEL" \
+        --arg system "$system_message" \
+        --arg user "$user_message" \
+        '{
+          model: $model,
+          messages: [
+            {role: "system", content: $system},
+            {role: "user", content: $user}
+          ],
+          temperature: 0.9,
+          max_tokens: 8192,
+          stream: false
+        }'
+      )"
+    fi
 
     http_code="$(curl -s -o "$response_file" -w '%{http_code}' \
       "${LLM_BASE_URL}" \
@@ -237,19 +279,25 @@ call_llm() {
       -d "$payload"
     )"
 
+    local raw_body
+    raw_body="$(cat "$response_file" 2>/dev/null || true)"
+
     if [ "$http_code" = "200" ]; then
       local content
-      content="$(jq -r '.choices[0].message.content' "$response_file" 2>/dev/null || true)"
+      content="$(echo "$raw_body" | jq -r '.choices[0].message.content' 2>/dev/null || true)"
       rm -f "$response_file"
-      # jq returns "null" literal if the field doesn't exist
+
       if [ "$content" = "null" ] || [ -z "$content" ]; then
+        local redacted_body
+        redacted_body="$(redact_keys "$raw_body")"
+        local ts
+        ts="$(date '+%Y%m%d-%H%M%S')-attempt${attempt}"
+        save_failed_response "$redacted_body" "$ts"
         local error_msg
-        error_msg="$(jq -r '.error.message // "unknown error"' "$response_file" 2>/dev/null || echo "unknown")"
-        rm -f "$response_file"
+        error_msg="$(echo "$raw_body" | jq -r '.error.message // "unknown error"' 2>/dev/null || echo "unknown")"
         if [ "$attempt" -lt "$MAX_RETRIES" ]; then
           local backoff=$(( attempt * 5 ))
-          warn "Empty response (attempt $attempt/${MAX_RETRIES}). Retrying in ${backoff}s..."
-          warn "Error: ${error_msg}"
+          warn "Empty response (attempt $attempt/${MAX_RETRIES}). Retrying in ${backoff}s... Error: ${error_msg}"
           sleep "$backoff"
           continue
         else
@@ -260,17 +308,20 @@ call_llm() {
       return 0
     fi
 
-    local error_body
-    error_body="$(cat "$response_file" 2>/dev/null || echo "unknown")"
     rm -f "$response_file"
+
+    local redacted_body
+    redacted_body="$(redact_keys "$raw_body")"
+    local ts
+    ts="$(date '+%Y%m%d-%H%M%S')-attempt${attempt}"
+    save_failed_response "$redacted_body" "$ts"
 
     if [ "$attempt" -lt "$MAX_RETRIES" ]; then
       local backoff=$(( attempt * 5 ))
       warn "API call failed (HTTP $http_code, attempt $attempt/${MAX_RETRIES}). Retrying in ${backoff}s..."
-      warn "Response: ${error_body}"
       sleep "$backoff"
     else
-      die "API call failed after ${MAX_RETRIES} attempts (HTTP ${http_code}). Response: ${error_body}"
+      die "API call failed after ${MAX_RETRIES} attempts (HTTP ${http_code}). Response saved to logs/."
     fi
   done
 }
@@ -297,7 +348,11 @@ generate_batch() {
     log "[DRY RUN] Would call LLM API with:"
     log "[DRY RUN]   URL: ${LLM_BASE_URL}"
     log "[DRY RUN]   Model: ${MODEL}"
-    log "[DRY RUN]   Reasoning effort: ${REASONING_EFFORT}"
+    if [ -n "$REASONING_EFFORT" ]; then
+      log "[DRY RUN]   Reasoning effort: ${REASONING_EFFORT}"
+    else
+      log "[DRY RUN]   Reasoning effort: (omitted)"
+    fi
     log "[DRY RUN]   System prompt: ${PROMPTS_DIR}/bulk-raw-ideation-system.md + project context"
     log "[DRY RUN]   User prompt: ${PROMPTS_DIR}/bulk-raw-ideation-user.md (batch ${batch_number}, ${concept_count} concepts)"
     log "[DRY RUN]   Context files (${#CONTEXT_FILES[@]}):"
@@ -393,7 +448,11 @@ main() {
   log "=== Big Game Hunting — Bulk Raw Ideation Pass ==="
   log "Endpoint: ${LLM_BASE_URL}"
   log "Model: ${MODEL}"
-  log "Reasoning effort: ${REASONING_EFFORT}"
+  if [ -n "$REASONING_EFFORT" ]; then
+    log "Reasoning effort: ${REASONING_EFFORT}"
+  else
+    log "Reasoning effort: (omitted)"
+  fi
   log "Batches: ${BATCHES}"
   log "Concepts per batch: ${CONCEPTS_PER_BATCH}"
   log "Total concepts (planned): ${TOTAL_CONCEPTS}"
