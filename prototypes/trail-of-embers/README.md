@@ -2,16 +2,18 @@
 
 ARTIFACT TYPE: Probe (playable prototype)
 AUTHORITY: PROBE
-STATUS: Draft — Challenge Pass 1 untested, human-gated
+STATUS: Draft — Scale Pass 1 untested, human-gated
 SOURCE-OF-TRUTH FILES TOUCHED: none
 
 This is the playable build for the probe defined in
 `artifacts/probes/0002-trail-of-embers-probe-brief.md`, extended by a
 bounded Challenge Pass 1 after the first playtest
 (`artifacts/playtests/0001-trail-of-embers-first-playtest.md`) came back
-positive but easy. It does not choose Trail of Embers as the final game,
-does not authorize production implementation, and is not itself a playtest
-result.
+positive but easy, and then by a bounded Scale Pass 1 after Challenge
+Pass 1 (`artifacts/playtests/0002-trail-of-embers-challenge-pass-1-playtest.md`)
+leaned GREEN and named "bigger, maze-like maps" as the next design vector.
+It does not choose Trail of Embers as the final game, does not authorize
+production implementation, and is not itself a playtest result.
 
 ## How to run
 
@@ -33,13 +35,14 @@ open prototypes/trail-of-embers/index.html
 - **G** — toggle debug view (shows torch/ember radii and the beast's current AI state + target line)
 - **Esc / quit** — not implemented; just close the browser tab (there is no launch menu to exit from)
 
-## Level / challenge structure (Challenge Pass 1)
+## Level / challenge structure
 
-Three fixed, hand-placed levels. The HUD shows the current level. Winning a
+Four fixed, hand-placed levels (three from Challenge Pass 1, plus one
+larger maze from Scale Pass 1). The HUD shows the current level. Winning a
 level offers **N** to continue; losing restarts the same level with **R**.
-The core loop is identical in all three — only simple per-level data varies
-(start positions, safe zone, obstacle rectangles, and in level 3 only, beast
-speed and ember tuning).
+The core loop is identical in all four — only simple per-level data varies
+(start positions, safe zone, obstacle rectangles, playfield size, and
+per-level beast speed and ember tuning).
 
 1. **First Light** — the exact layout and tuning from the successful first
    playtest, unchanged. Slightly easy on purpose: teaches ember-as-bait.
@@ -60,6 +63,42 @@ speed and ember tuning).
    explicit cap in the code — the limit is emergent from the
    cooldown/lifetime numbers — but it is a real, player-facing constraint
    in this level.
+4. **The Ember Maze** (Scale Pass 1) — one larger hand-authored maze on a
+   1280×760 playfield (~1.9× the area of levels 1–3, which are unchanged at
+   900×560). Three horizontal wall bands divide the field into a top
+   corridor, a long east–west hall, a row of mid chambers, and a bottom
+   corridor; baffles weave the hall. The intended route runs up the left
+   side, east along the hall (where the beast starts, mid-map), then up
+   through the single gap above column three into the top corridor and east
+   to the stone circle. Deliberate design beats:
+   - **Planned bait point** — a small pocket hangs below the hall's east
+     end, directly under the final climb. Stepping in, dropping an ember,
+     and climbing while the beast dives into the pocket is the natural play
+     before the finish. (Baiting the beast off the head-on hall encounter
+     is the other one.)
+   - **Map-memory moment** — the wide, inviting shaft on the far right of
+     the bottom corridor looks like a shortcut to the circle but is sealed
+     at the top: the maze's one dead end, learnable in a single failed
+     attempt. A central spine (gaps above and below the middle chamber)
+     gives a bail-out loop, so the correct route doesn't demand perfect
+     execution.
+   - **Tuning** — reuses level 3's ember numbers (1.5s cooldown / 4.0s
+     lifetime, so the same emergent three-hot-ember limit applies); beast
+     speed 140 sits between levels 1–2 (130) and level 3 (150), because the
+     larger field amplifies the wall-ghosting beast's straight-line
+     advantage over the player's walled routes.
+
+## What changed in Scale Pass 1
+
+- Level 4, "The Ember Maze," as described above — new level data only.
+- Per-level playfield size: `LEVELS` entries may specify `fieldW`/`fieldH`,
+  defaulting to the original 900×560. The canvas, fog layer, and HUD resize
+  on level load. Levels 1–3 are pixel-identical to Challenge Pass 1.
+- The final win message now says four levels instead of three.
+
+Nothing else changed in this pass: beast AI rules, torch/ember/fog
+rendering, the debug overlay, collision, win/lose conditions, controls, and
+the restart flow are untouched.
 
 ## What changed in Challenge Pass 1
 
@@ -90,6 +129,33 @@ Challenge Pass 1 asks whether the GREEN read holds when the challenge
 tightens — difficulty comes from clearer, tighter level design, not from
 making the beast mysterious or the screen unreadable.
 
+Scale Pass 1 adds one more axis: **does the proven loop survive scale?**
+Readability, mood, and the fairness of beast wall-clipping have only been
+validated at single-screen 900×560 scale. Level 4 asks whether Trail of
+Embers still feels readable, tense, and fair when the play space becomes
+larger and more maze-like — with difficulty coming from route learning,
+memory, timing, and bait placement, not from unreadability. Bigger, not
+broader: no new systems were added.
+
+## Playtest questions for the scale pass (level 4)
+
+- Can a plan be formed after one or two failed attempts, or does the maze
+  feel arbitrary? Is the route learnable and fair?
+- Does the dead-end shaft read as "my mistake, now I know the map," or as a
+  cheap trap?
+- Does the pocket below the final climb get discovered and used as a
+  deliberate bait room? Does baiting there feel like the puzzle clicking?
+- Does beast wall-clipping still read as fair "ghost mode" on the larger
+  field, where its straight lines cut across much more of your route?
+- Does the bigger space stay tense, or does it turn into stretches of
+  boring dark walking between encounters?
+- Does the emergent three-ember limit still register at this scale, or does
+  the larger field make embers feel scarce/unfair?
+- Is the larger canvas comfortable on your screen, or is a scrolling
+  camera becoming necessary (currently a deliberate non-goal)?
+- Does fast retry still hold up — is pressing R immediately after a loss
+  still the instinct, even with a longer route to re-run?
+
 ## Playtest questions for the challenge pass
 
 - Does level 2 actually force a deliberate bait drop, or can it be beaten by
@@ -109,8 +175,9 @@ making the beast mysterious or the screen unreadable.
 
 ## What's implemented
 
-- Three fixed single-screen dark levels (not procedural), each a handful of
-  hardcoded obstacle rectangles.
+- Four fixed single-screen dark levels (not procedural), each a handful of
+  hardcoded obstacle rectangles. Levels 1–3 run at 900×560; level 4 runs at
+  1280×760 (the canvas resizes per level — no scrolling camera).
 - Player movement (8-directional, arrow keys/WASD) with simple
   circle-vs-rectangle collision against obstacles.
 - Constant torch radius around the player — this is the player's baseline
@@ -148,7 +215,13 @@ making the beast mysterious or the screen unreadable.
 
 ## What's intentionally missing (per the probe brief's non-goals)
 
-- No procedural generation — all three levels are hardcoded data.
+- No procedural generation — all four levels are hardcoded data.
+- No scrolling camera or viewport system — level 4's bigger space comes
+  from a bigger canvas, so the whole field stays on screen (the fog is what
+  hides it). If maps grow past comfortable monitor size, a camera becomes a
+  real (currently unauthorized) decision.
+- No explicit ember inventory/cap — level 4 keeps the three-ember limit
+  emergent from cooldown/lifetime tuning, same as level 3.
 - No adaptive/learning AI, no new enemy types — the three rules above are
   the entire beast behavior in every level.
 - No randomness anywhere.
@@ -160,7 +233,7 @@ making the beast mysterious or the screen unreadable.
   only difficulty steps for the challenge pass, not a progression system.
 - No final art — programmer-art circles and rectangles only.
 - No walls blocking the beast (it ignores obstacles by design, per "no
-  pathfinding beyond direct movement toward the target point"). Levels 2–3
+  pathfinding beyond direct movement toward the target point"). Levels 2–4
   deliberately lean on this: walls slow *you*, never it.
 
 ## GREEN / RED criteria (summarized from the probe brief)

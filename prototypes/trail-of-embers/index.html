@@ -70,17 +70,21 @@ const EMBER_RADIUS = 155;           // peak illumination radius
 const EMBER_FADE_MS = 1500;         // trailing fade of the light itself (after it stops being a target)
 
 // Per-level tunables fall back to these baseline values (the exact values
-// the first playtest ran with).
+// the first playtest ran with). fieldW/fieldH let a level use a larger
+// playfield; levels without them run at the original 900x560.
 const LEVEL_DEFAULTS = {
   beastSpeed: 130,        // px/sec, slower than player
   emberCooldownMs: 900,
   emberLifetimeMs: 5200,  // how long an ember stays "hot" (a valid beast target)
+  fieldW: W,
+  fieldH: H,
 };
 
-// Challenge Pass 1: three fixed, hand-placed levels. Only simple data varies
-// per level -- starts, safe zone, obstacle rectangles, and (level 3 only)
-// beast speed / ember tuning. Obstacles block the player but never the
-// beast, which still walks straight through walls by design.
+// Challenge Pass 1 gave us three fixed, hand-placed levels; Scale Pass 1
+// adds a fourth, larger maze level. Only simple data varies per level --
+// starts, safe zone, obstacle rectangles, playfield size, and beast speed /
+// ember tuning. Obstacles block the player but never the beast, which
+// still walks straight through walls by design.
 const LEVELS = [
   {
     name: "First Light",
@@ -138,6 +142,52 @@ const LEVELS = [
       { x: 760, y: 170, w: 140, h: 24 },  // final weave before the circle
     ],
   },
+  {
+    name: "The Ember Maze",
+    // Scale Pass 1: one larger (1280x760) hand-authored maze. Three wall
+    // bands split the field into a top corridor, a long middle hall, a row
+    // of mid chambers, and a bottom corridor. The intended route runs
+    // up the left side, east along the hall, then up above column three to
+    // the circle. A central spine (gaps above and below the middle
+    // chambers) offers a bail-out loop; a small pocket below the hall's
+    // east end is a natural bait room before the final climb; the wide,
+    // inviting shaft on the far right is sealed at the top -- the one
+    // dead end the map asks you to remember. Tuning reuses level 3's
+    // ember numbers (same emergent three-hot-ember limit) with the beast
+    // between level 1-2 and level 3 speeds, since the bigger field
+    // amplifies its straight-line wall-ghosting advantage.
+    fieldW: 1280,
+    fieldH: 760,
+    playerStart: { x: 70, y: 690 },
+    beastStart: { x: 615, y: 300 },
+    safeZone: { x: 1200, y: 80, r: 28 },
+    beastSpeed: 140,
+    emberCooldownMs: 1500,
+    emberLifetimeMs: 4000,
+    obstacles: [
+      // top band (y=170) -- single gap above column three leads to the goal corridor
+      { x: 0,    y: 170, w: 810, h: 24 },
+      { x: 940,  y: 170, w: 340, h: 24 },
+      // mid band (y=360) -- gaps at columns one, two, three; open over the shaft
+      { x: 0,    y: 360, w: 300, h: 24 },
+      { x: 430,  y: 360, w: 140, h: 24 },
+      { x: 680,  y: 360, w: 130, h: 24 },
+      { x: 940,  y: 360, w: 150, h: 24 },
+      // low band (y=576) -- gaps at the start, the central spine, and the shaft mouth
+      { x: 190,  y: 576, w: 380, h: 24 },
+      { x: 680,  y: 576, w: 410, h: 24 },
+      // dividers between the mid chambers
+      { x: 500,  y: 384, w: 26,  h: 192 },
+      { x: 750,  y: 384, w: 26,  h: 192 },
+      // wall sealing the right shaft off from column three (dead end)
+      { x: 1000, y: 194, w: 26,  h: 382 },
+      // baffles that weave the long middle hall
+      { x: 500,  y: 194, w: 26,  h: 90 },
+      { x: 750,  y: 270, w: 26,  h: 90 },
+      // final weave before the stone circle
+      { x: 1080, y: 0,   w: 26,  h: 100 },
+    ],
+  },
 ];
 
 // ---- state -------------------------------------------------------
@@ -150,6 +200,7 @@ const fogCtx = fogCanvas.getContext("2d");
 const emberStatusEl = document.getElementById("ember-status");
 const levelStatusEl = document.getElementById("level-status");
 const overlayMsgEl = document.getElementById("overlay-msg");
+const hudEl = document.getElementById("hud");
 
 let debugView = false;
 let gameOver = false; // "won" | "lost" | false
@@ -163,6 +214,12 @@ let player, beast, embers;
 function loadLevel(i) {
   levelIndex = i;
   level = Object.assign({}, LEVEL_DEFAULTS, LEVELS[i]);
+  canvas.width = level.fieldW;
+  canvas.height = level.fieldH;
+  fogCanvas.width = level.fieldW;
+  fogCanvas.height = level.fieldH;
+  hudEl.style.width = level.fieldW + "px";
+  overlayMsgEl.style.width = level.fieldW + "px";
   levelStatusEl.textContent = `level ${i + 1}/${LEVELS.length} — ${level.name}`;
   resetGame();
 }
@@ -235,8 +292,8 @@ function updatePlayer(dtSec) {
     const blockedY = level.obstacles.some(o => circleRectCollide(player.x, ny, PLAYER_RADIUS, o));
     if (!blockedX) player.x = nx;
     if (!blockedY) player.y = ny;
-    player.x = Math.max(PLAYER_RADIUS, Math.min(W - PLAYER_RADIUS, player.x));
-    player.y = Math.max(PLAYER_RADIUS, Math.min(H - PLAYER_RADIUS, player.y));
+    player.x = Math.max(PLAYER_RADIUS, Math.min(level.fieldW - PLAYER_RADIUS, player.x));
+    player.y = Math.max(PLAYER_RADIUS, Math.min(level.fieldH - PLAYER_RADIUS, player.y));
   }
 
   if (keys.has(" ")) tryDropEmber();
@@ -276,7 +333,7 @@ function checkWinLose() {
     overlayMsgEl.style.color = "#8fe38f";
     overlayMsgEl.textContent = levelIndex < LEVELS.length - 1
       ? "YOU REACHED SAFETY — press N for the next level"
-      : "ALL THREE LEVELS CLEAR — press Shift+R to start over";
+      : "ALL FOUR LEVELS CLEAR — press Shift+R to start over";
   } else if (dist(player, beast) < PLAYER_RADIUS + BEAST_RADIUS) {
     gameOver = "lost";
     overlayMsgEl.style.color = "#e37d7d";
@@ -287,7 +344,7 @@ function checkWinLose() {
 // ---- draw -------------------------------------------------------
 function drawWorld() {
   ctx.fillStyle = "#0e1a10";
-  ctx.fillRect(0, 0, W, H);
+  ctx.fillRect(0, 0, level.fieldW, level.fieldH);
 
   ctx.fillStyle = "#3a2f22";
   for (const o of level.obstacles) ctx.fillRect(o.x, o.y, o.w, o.h);
@@ -334,7 +391,7 @@ function drawWorld() {
 function drawFog() {
   fogCtx.globalCompositeOperation = "source-over";
   fogCtx.fillStyle = "#000";
-  fogCtx.fillRect(0, 0, W, H);
+  fogCtx.fillRect(0, 0, level.fieldW, level.fieldH);
   fogCtx.globalCompositeOperation = "destination-out";
 
   function punchHole(x, y, r) {
