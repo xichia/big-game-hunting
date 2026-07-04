@@ -54,7 +54,12 @@ speed and ember tuning).
    everything. The beast is faster (150 px/s vs. 130, still slower than the
    player's 175), embers recharge slower (1.5s vs. 0.9s) and stay hot for
    less time (4.0s vs. 5.2s). Winning takes route memory, timed bait drops,
-   and committing to each leg of the snake.
+   and committing to each leg of the snake. A side effect of this tuning:
+   at most three embers can be hot at once (drops at 0s/1.5s/3.0s; the
+   first cools at 4.0s before a fourth can land at 4.5s). There is no
+   explicit cap in the code — the limit is emergent from the
+   cooldown/lifetime numbers — but it is a real, player-facing constraint
+   in this level.
 
 ## What changed in Challenge Pass 1
 
