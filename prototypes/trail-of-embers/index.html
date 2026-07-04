@@ -1,0 +1,363 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>Trail of Embers — Probe Prototype</title>
+<style>
+  html, body {
+    margin: 0;
+    padding: 0;
+    background: #0a0a08;
+    color: #ddd;
+    font-family: Menlo, Consolas, monospace;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
+  #hud {
+    width: 900px;
+    max-width: 100%;
+    padding: 8px 4px;
+    font-size: 13px;
+    color: #a89;
+    display: flex;
+    justify-content: space-between;
+  }
+  #hud span.key { color: #e8b04a; }
+  canvas {
+    background: #06120a;
+    border: 1px solid #333;
+    image-rendering: pixelated;
+  }
+  #overlay-msg {
+    position: absolute;
+    top: 45%;
+    width: 900px;
+    max-width: 100%;
+    text-align: center;
+    font-size: 28px;
+    font-weight: bold;
+    pointer-events: none;
+    text-shadow: 0 0 8px #000, 0 0 8px #000;
+  }
+</style>
+</head>
+<body>
+  <div id="hud">
+    <span><span class="key">Arrows/WASD</span> move &nbsp; <span class="key">Space</span> drop ember &nbsp; <span class="key">R</span> restart &nbsp; <span class="key">G</span> debug view</span>
+    <span id="ember-status">ember: ready</span>
+  </div>
+  <div style="position: relative;">
+    <canvas id="game" width="900" height="560"></canvas>
+    <div id="overlay-msg"></div>
+  </div>
+
+<script>
+"use strict";
+
+// ---- constants -------------------------------------------------------
+const W = 900, H = 560;
+const PLAYER_RADIUS = 10;
+const PLAYER_SPEED = 175;           // px/sec
+const TORCH_RADIUS = 85;            // player's constant visibility + beast's default target
+
+const BEAST_RADIUS = 13;
+const BEAST_CHASE_SPEED = 130;      // px/sec, slower than player
+const BEAST_PATROL_SPEED = 55;
+const BEAST_IDLE_SECONDS = 1.2;     // brief grace period at level start
+
+const EMBER_RADIUS = 155;           // peak illumination radius
+const EMBER_LIFETIME_MS = 5200;     // how long an ember stays "hot" (a valid beast target)
+const EMBER_FADE_MS = 1500;         // trailing fade of the light itself (after it stops being a target)
+const EMBER_COOLDOWN_MS = 900;
+
+const SAFE_ZONE = { x: W - 80, y: H - 80, r: 30 };
+const PLAYER_START = { x: 60, y: 60 };
+const BEAST_START = { x: W - 140, y: 100 };
+
+// Fixed obstacle layout (not procedural) -- simple rectangles used only to
+// break sightlines / force the player to route around them while lit.
+const OBSTACLES = [
+  { x: 220, y: 0,   w: 26, h: 230 },
+  { x: 220, y: 340, w: 26, h: 220 },
+  { x: 420, y: 120, w: 200, h: 24 },
+  { x: 560, y: 250, w: 26, h: 260 },
+  { x: 700, y: 60,  w: 26, h: 220 },
+  { x: 350, y: 420, w: 220, h: 24 },
+];
+
+// ---- state -------------------------------------------------------
+const canvas = document.getElementById("game");
+const ctx = canvas.getContext("2d");
+const fogCanvas = document.createElement("canvas");
+fogCanvas.width = W; fogCanvas.height = H;
+const fogCtx = fogCanvas.getContext("2d");
+
+const emberStatusEl = document.getElementById("ember-status");
+const overlayMsgEl = document.getElementById("overlay-msg");
+
+let debugView = false;
+let gameOver = false; // "won" | "lost" | false
+let lastEmberDropAt = -Infinity;
+let elapsedMs = 0;
+
+let player, beast, embers;
+
+function resetGame() {
+  player = { x: PLAYER_START.x, y: PLAYER_START.y };
+  beast = {
+    x: BEAST_START.x, y: BEAST_START.y,
+    state: "idle",             // idle | patrol | chase-ember | chase-torch
+    patrolTarget: { x: BEAST_START.x, y: BEAST_START.y + 160 },
+  };
+  embers = []; // { x, y, droppedAt }
+  lastEmberDropAt = -Infinity;
+  elapsedMs = 0;
+  gameOver = false;
+  overlayMsgEl.textContent = "";
+}
+resetGame();
+
+// ---- input -------------------------------------------------------
+const keys = new Set();
+window.addEventListener("keydown", (e) => {
+  keys.add(e.key.toLowerCase());
+  if (e.key === " ") e.preventDefault(); // stop page scroll
+  if (e.key.toLowerCase() === "r") resetGame();
+  if (e.key.toLowerCase() === "g") debugView = !debugView;
+});
+window.addEventListener("keyup", (e) => keys.delete(e.key.toLowerCase()));
+
+// ---- helpers -------------------------------------------------------
+function dist(a, b) { return Math.hypot(a.x - b.x, a.y - b.y); }
+
+function circleRectCollide(cx, cy, r, rect) {
+  const nearestX = Math.max(rect.x, Math.min(cx, rect.x + rect.w));
+  const nearestY = Math.max(rect.y, Math.min(cy, rect.y + rect.h));
+  return Math.hypot(cx - nearestX, cy - nearestY) < r;
+}
+
+function moveToward(entity, target, speed, dtSec) {
+  const dx = target.x - entity.x, dy = target.y - entity.y;
+  const d = Math.hypot(dx, dy);
+  if (d < 1) return;
+  const step = Math.min(speed * dtSec, d);
+  entity.x += (dx / d) * step;
+  entity.y += (dy / d) * step;
+}
+
+// ---- update -------------------------------------------------------
+function updatePlayer(dtSec) {
+  let dx = 0, dy = 0;
+  if (keys.has("arrowleft") || keys.has("a")) dx -= 1;
+  if (keys.has("arrowright") || keys.has("d")) dx += 1;
+  if (keys.has("arrowup") || keys.has("w")) dy -= 1;
+  if (keys.has("arrowdown") || keys.has("s")) dy += 1;
+
+  if (dx !== 0 || dy !== 0) {
+    const len = Math.hypot(dx, dy);
+    const nx = player.x + (dx / len) * PLAYER_SPEED * dtSec;
+    const ny = player.y + (dy / len) * PLAYER_SPEED * dtSec;
+
+    // Resolve each axis independently against obstacles so sliding along a
+    // wall works instead of fully blocking diagonal movement.
+    const blockedX = OBSTACLES.some(o => circleRectCollide(nx, player.y, PLAYER_RADIUS, o));
+    const blockedY = OBSTACLES.some(o => circleRectCollide(player.x, ny, PLAYER_RADIUS, o));
+    if (!blockedX) player.x = nx;
+    if (!blockedY) player.y = ny;
+    player.x = Math.max(PLAYER_RADIUS, Math.min(W - PLAYER_RADIUS, player.x));
+    player.y = Math.max(PLAYER_RADIUS, Math.min(H - PLAYER_RADIUS, player.y));
+  }
+
+  if (keys.has(" ")) tryDropEmber();
+}
+
+function tryDropEmber() {
+  if (elapsedMs - lastEmberDropAt < EMBER_COOLDOWN_MS) return;
+  lastEmberDropAt = elapsedMs;
+  embers.push({ x: player.x, y: player.y, droppedAt: elapsedMs });
+}
+
+// Beast AI -- deliberately the simplest possible rule set:
+//   1. the newest still-hot ember is the target, if one exists
+//   2. otherwise the beast heads for the player's own torch (their
+//      continuous "light event"), since the player is never truly dark
+//   3. a short idle/patrol grace period only applies before anything has
+//      ever been lit
+function updateBeast(dtSec) {
+  const hotEmbers = embers.filter(e => elapsedMs - e.droppedAt < EMBER_LIFETIME_MS);
+
+  if (hotEmbers.length > 0) {
+    const newest = hotEmbers[hotEmbers.length - 1];
+    beast.state = "chase-ember";
+    moveToward(beast, newest, BEAST_CHASE_SPEED, dtSec);
+  } else if (elapsedMs < BEAST_IDLE_SECONDS * 1000 && embers.length === 0) {
+    beast.state = "idle";
+    moveToward(beast, beast.patrolTarget, BEAST_PATROL_SPEED, dtSec);
+  } else {
+    beast.state = "chase-torch";
+    moveToward(beast, player, BEAST_CHASE_SPEED, dtSec);
+  }
+}
+
+function checkWinLose() {
+  if (dist(player, SAFE_ZONE) < SAFE_ZONE.r + PLAYER_RADIUS) {
+    gameOver = "won";
+    overlayMsgEl.style.color = "#8fe38f";
+    overlayMsgEl.textContent = "YOU REACHED SAFETY — press R to restart";
+  } else if (dist(player, beast) < PLAYER_RADIUS + BEAST_RADIUS) {
+    gameOver = "lost";
+    overlayMsgEl.style.color = "#e37d7d";
+    overlayMsgEl.textContent = "THE BEAST CAUGHT YOU — press R to restart";
+  }
+}
+
+// ---- draw -------------------------------------------------------
+function drawWorld() {
+  ctx.fillStyle = "#0e1a10";
+  ctx.fillRect(0, 0, W, H);
+
+  ctx.fillStyle = "#3a2f22";
+  for (const o of OBSTACLES) ctx.fillRect(o.x, o.y, o.w, o.h);
+
+  // safe zone (stone circle)
+  ctx.beginPath();
+  ctx.arc(SAFE_ZONE.x, SAFE_ZONE.y, SAFE_ZONE.r, 0, Math.PI * 2);
+  ctx.fillStyle = "#8a8a78";
+  ctx.fill();
+  ctx.strokeStyle = "#cfcfae";
+  ctx.lineWidth = 2;
+  ctx.stroke();
+
+  // embers (glow marks on the ground, fade after they stop being hot)
+  for (const e of embers) {
+    const age = elapsedMs - e.droppedAt;
+    const alpha = Math.max(0, 1 - Math.max(0, age - EMBER_LIFETIME_MS) / EMBER_FADE_MS);
+    if (alpha <= 0) continue;
+    const grad = ctx.createRadialGradient(e.x, e.y, 0, e.x, e.y, 10);
+    grad.addColorStop(0, `rgba(255,140,40,${alpha})`);
+    grad.addColorStop(1, `rgba(255,140,40,0)`);
+    ctx.fillStyle = grad;
+    ctx.beginPath();
+    ctx.arc(e.x, e.y, 10, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  // beast
+  ctx.beginPath();
+  ctx.arc(beast.x, beast.y, BEAST_RADIUS, 0, Math.PI * 2);
+  ctx.fillStyle = "#b23a3a";
+  ctx.fill();
+
+  // player
+  ctx.beginPath();
+  ctx.arc(player.x, player.y, PLAYER_RADIUS, 0, Math.PI * 2);
+  ctx.fillStyle = "#e8d27a";
+  ctx.fill();
+}
+
+// Punch light holes into an opaque fog layer -- this is the entire
+// "lighting engine": everything not under a light radius is simply never
+// revealed, including the beast.
+function drawFog() {
+  fogCtx.globalCompositeOperation = "source-over";
+  fogCtx.fillStyle = "#000";
+  fogCtx.fillRect(0, 0, W, H);
+  fogCtx.globalCompositeOperation = "destination-out";
+
+  function punchHole(x, y, r) {
+    const grad = fogCtx.createRadialGradient(x, y, 0, x, y, r);
+    grad.addColorStop(0, "rgba(0,0,0,1)");
+    grad.addColorStop(0.75, "rgba(0,0,0,0.9)");
+    grad.addColorStop(1, "rgba(0,0,0,0)");
+    fogCtx.fillStyle = grad;
+    fogCtx.beginPath();
+    fogCtx.arc(x, y, r, 0, Math.PI * 2);
+    fogCtx.fill();
+  }
+
+  punchHole(player.x, player.y, TORCH_RADIUS);
+  for (const e of embers) {
+    const age = elapsedMs - e.droppedAt;
+    const t = Math.max(0, 1 - age / EMBER_LIFETIME_MS);
+    const r = EMBER_RADIUS * (0.35 + 0.65 * t); // shrinks as it cools
+    if (t > 0 || age - EMBER_LIFETIME_MS < EMBER_FADE_MS) {
+      punchHole(e.x, e.y, Math.max(20, r));
+    }
+  }
+
+  fogCtx.globalCompositeOperation = "source-over";
+  ctx.drawImage(fogCanvas, 0, 0);
+}
+
+function drawDebug() {
+  if (!debugView) return;
+  ctx.save();
+  ctx.strokeStyle = "rgba(255,255,255,0.35)";
+  ctx.setLineDash([4, 4]);
+
+  ctx.beginPath();
+  ctx.arc(player.x, player.y, TORCH_RADIUS, 0, Math.PI * 2);
+  ctx.stroke();
+
+  for (const e of embers) {
+    ctx.beginPath();
+    ctx.arc(e.x, e.y, EMBER_RADIUS, 0, Math.PI * 2);
+    ctx.stroke();
+  }
+
+  ctx.beginPath();
+  ctx.arc(beast.x, beast.y, BEAST_RADIUS + 4, 0, Math.PI * 2);
+  ctx.strokeStyle = "rgba(255,220,0,0.8)";
+  ctx.stroke();
+
+  // beast target crosshair
+  let targetPt = null;
+  const hotEmbers = embers.filter(e => elapsedMs - e.droppedAt < EMBER_LIFETIME_MS);
+  if (hotEmbers.length > 0) targetPt = hotEmbers[hotEmbers.length - 1];
+  else if (beast.state !== "idle") targetPt = player;
+  if (targetPt) {
+    ctx.setLineDash([]);
+    ctx.strokeStyle = "rgba(255,220,0,0.8)";
+    ctx.beginPath();
+    ctx.moveTo(beast.x, beast.y);
+    ctx.lineTo(targetPt.x, targetPt.y);
+    ctx.stroke();
+  }
+
+  ctx.setLineDash([]);
+  ctx.fillStyle = "#ffdd66";
+  ctx.font = "13px monospace";
+  ctx.fillText(`beast: ${beast.state}`, beast.x + 16, beast.y - 16);
+  ctx.fillText(`player`, player.x + 12, player.y - 12);
+  ctx.restore();
+}
+
+// ---- main loop -------------------------------------------------------
+let lastTs = performance.now();
+function frame(ts) {
+  const dtSec = Math.min(0.05, (ts - lastTs) / 1000);
+  lastTs = ts;
+
+  if (!gameOver) {
+    elapsedMs += dtSec * 1000;
+    updatePlayer(dtSec);
+    updateBeast(dtSec);
+    checkWinLose();
+  }
+
+  drawWorld();
+  drawFog();
+  drawDebug();
+
+  const cooldownLeft = Math.max(0, EMBER_COOLDOWN_MS - (elapsedMs - lastEmberDropAt));
+  emberStatusEl.textContent = cooldownLeft > 0
+    ? `ember: cooling (${(cooldownLeft / 1000).toFixed(1)}s)`
+    : "ember: ready";
+
+  requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>
