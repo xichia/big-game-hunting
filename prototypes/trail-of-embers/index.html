@@ -44,7 +44,8 @@
 </head>
 <body>
   <div id="hud">
-    <span><span class="key">Arrows/WASD</span> move &nbsp; <span class="key">Space</span> drop ember &nbsp; <span class="key">R</span> restart &nbsp; <span class="key">G</span> debug view</span>
+    <span><span class="key">Arrows/WASD</span> move &nbsp; <span class="key">Space</span> ember &nbsp; <span class="key">R</span> retry level &nbsp; <span class="key">N</span> next (after win) &nbsp; <span class="key">Shift+R</span> level 1 &nbsp; <span class="key">G</span> debug</span>
+    <span id="level-status"></span>
     <span id="ember-status">ember: ready</span>
   </div>
   <div style="position: relative;">
@@ -62,28 +63,81 @@ const PLAYER_SPEED = 175;           // px/sec
 const TORCH_RADIUS = 85;            // player's constant visibility + beast's default target
 
 const BEAST_RADIUS = 13;
-const BEAST_CHASE_SPEED = 130;      // px/sec, slower than player
 const BEAST_PATROL_SPEED = 55;
 const BEAST_IDLE_SECONDS = 1.2;     // brief grace period at level start
 
 const EMBER_RADIUS = 155;           // peak illumination radius
-const EMBER_LIFETIME_MS = 5200;     // how long an ember stays "hot" (a valid beast target)
 const EMBER_FADE_MS = 1500;         // trailing fade of the light itself (after it stops being a target)
-const EMBER_COOLDOWN_MS = 900;
 
-const SAFE_ZONE = { x: W - 80, y: H - 80, r: 30 };
-const PLAYER_START = { x: 60, y: 60 };
-const BEAST_START = { x: W - 140, y: 100 };
+// Per-level tunables fall back to these baseline values (the exact values
+// the first playtest ran with).
+const LEVEL_DEFAULTS = {
+  beastSpeed: 130,        // px/sec, slower than player
+  emberCooldownMs: 900,
+  emberLifetimeMs: 5200,  // how long an ember stays "hot" (a valid beast target)
+};
 
-// Fixed obstacle layout (not procedural) -- simple rectangles used only to
-// break sightlines / force the player to route around them while lit.
-const OBSTACLES = [
-  { x: 220, y: 0,   w: 26, h: 230 },
-  { x: 220, y: 340, w: 26, h: 220 },
-  { x: 420, y: 120, w: 200, h: 24 },
-  { x: 560, y: 250, w: 26, h: 260 },
-  { x: 700, y: 60,  w: 26, h: 220 },
-  { x: 350, y: 420, w: 220, h: 24 },
+// Challenge Pass 1: three fixed, hand-placed levels. Only simple data varies
+// per level -- starts, safe zone, obstacle rectangles, and (level 3 only)
+// beast speed / ember tuning. Obstacles block the player but never the
+// beast, which still walks straight through walls by design.
+const LEVELS = [
+  {
+    name: "First Light",
+    // The successful first-playtest layout, unchanged. Teaches ember-as-bait.
+    playerStart: { x: 60, y: 60 },
+    beastStart: { x: W - 140, y: 100 },
+    safeZone: { x: W - 80, y: H - 80, r: 30 },
+    obstacles: [
+      { x: 220, y: 0,   w: 26, h: 230 },
+      { x: 220, y: 340, w: 26, h: 220 },
+      { x: 420, y: 120, w: 200, h: 24 },
+      { x: 560, y: 250, w: 26, h: 260 },
+      { x: 700, y: 60,  w: 26, h: 220 },
+      { x: 350, y: 420, w: 220, h: 24 },
+    ],
+  },
+  {
+    name: "The Guarded Circle",
+    // The stone circle sits behind a solid pocket wall with mouths at the
+    // top and bottom, and the beast starts directly in your path in front
+    // of it. Entering the pocket while pursued gets you cornered (the beast
+    // cuts through the wall), so you must bait it away before the approach.
+    // Tuning is identical to level 1 -- the difficulty is purely spatial.
+    playerStart: { x: 60, y: 280 },
+    beastStart: { x: 690, y: 280 },
+    safeZone: { x: 815, y: 280, r: 28 },
+    obstacles: [
+      // mid-field wall with a single center gap
+      { x: 300, y: 0,   w: 26, h: 220 },
+      { x: 300, y: 340, w: 26, h: 220 },
+      // corridor bars funneling the middle route
+      { x: 450, y: 150, w: 180, h: 24 },
+      { x: 450, y: 386, w: 180, h: 24 },
+      // pocket wall shielding the safe zone; enter from top or bottom
+      { x: 730, y: 130, w: 26, h: 300 },
+    ],
+  },
+  {
+    name: "The Long Dark",
+    // A serpentine of four walls with alternating gaps: the player's route
+    // is long while the beast cuts straight lines through everything.
+    // Faster beast, slower and shorter-lived embers -- winning takes route
+    // memory, timed bait drops, and committing to each leg of the snake.
+    playerStart: { x: 60, y: 500 },
+    beastStart: { x: 440, y: 300 },
+    safeZone: { x: 840, y: 64, r: 26 },
+    beastSpeed: 150,
+    emberCooldownMs: 1500,
+    emberLifetimeMs: 4000,
+    obstacles: [
+      { x: 150, y: 150, w: 26, h: 410 },  // pass at the top
+      { x: 320, y: 0,   w: 26, h: 410 },  // pass at the bottom
+      { x: 490, y: 150, w: 26, h: 410 },  // pass at the top
+      { x: 660, y: 0,   w: 26, h: 410 },  // pass at the bottom
+      { x: 760, y: 170, w: 140, h: 24 },  // final weave before the circle
+    ],
+  },
 ];
 
 // ---- state -------------------------------------------------------
@@ -94,6 +148,7 @@ fogCanvas.width = W; fogCanvas.height = H;
 const fogCtx = fogCanvas.getContext("2d");
 
 const emberStatusEl = document.getElementById("ember-status");
+const levelStatusEl = document.getElementById("level-status");
 const overlayMsgEl = document.getElementById("overlay-msg");
 
 let debugView = false;
@@ -101,14 +156,23 @@ let gameOver = false; // "won" | "lost" | false
 let lastEmberDropAt = -Infinity;
 let elapsedMs = 0;
 
+let levelIndex = 0;
+let level; // current level config, resolved against LEVEL_DEFAULTS
 let player, beast, embers;
 
+function loadLevel(i) {
+  levelIndex = i;
+  level = Object.assign({}, LEVEL_DEFAULTS, LEVELS[i]);
+  levelStatusEl.textContent = `level ${i + 1}/${LEVELS.length} — ${level.name}`;
+  resetGame();
+}
+
 function resetGame() {
-  player = { x: PLAYER_START.x, y: PLAYER_START.y };
+  player = { x: level.playerStart.x, y: level.playerStart.y };
   beast = {
-    x: BEAST_START.x, y: BEAST_START.y,
+    x: level.beastStart.x, y: level.beastStart.y,
     state: "idle",             // idle | patrol | chase-ember | chase-torch
-    patrolTarget: { x: BEAST_START.x, y: BEAST_START.y + 160 },
+    patrolTarget: { x: level.beastStart.x, y: level.beastStart.y + 160 },
   };
   embers = []; // { x, y, droppedAt }
   lastEmberDropAt = -Infinity;
@@ -116,14 +180,20 @@ function resetGame() {
   gameOver = false;
   overlayMsgEl.textContent = "";
 }
-resetGame();
+loadLevel(0);
 
 // ---- input -------------------------------------------------------
 const keys = new Set();
 window.addEventListener("keydown", (e) => {
   keys.add(e.key.toLowerCase());
   if (e.key === " ") e.preventDefault(); // stop page scroll
-  if (e.key.toLowerCase() === "r") resetGame();
+  if (e.key.toLowerCase() === "r") {
+    if (e.shiftKey) loadLevel(0); // full reset back to level 1
+    else resetGame();             // restart the current level
+  }
+  if (e.key.toLowerCase() === "n" && gameOver === "won" && levelIndex < LEVELS.length - 1) {
+    loadLevel(levelIndex + 1);
+  }
   if (e.key.toLowerCase() === "g") debugView = !debugView;
 });
 window.addEventListener("keyup", (e) => keys.delete(e.key.toLowerCase()));
@@ -161,8 +231,8 @@ function updatePlayer(dtSec) {
 
     // Resolve each axis independently against obstacles so sliding along a
     // wall works instead of fully blocking diagonal movement.
-    const blockedX = OBSTACLES.some(o => circleRectCollide(nx, player.y, PLAYER_RADIUS, o));
-    const blockedY = OBSTACLES.some(o => circleRectCollide(player.x, ny, PLAYER_RADIUS, o));
+    const blockedX = level.obstacles.some(o => circleRectCollide(nx, player.y, PLAYER_RADIUS, o));
+    const blockedY = level.obstacles.some(o => circleRectCollide(player.x, ny, PLAYER_RADIUS, o));
     if (!blockedX) player.x = nx;
     if (!blockedY) player.y = ny;
     player.x = Math.max(PLAYER_RADIUS, Math.min(W - PLAYER_RADIUS, player.x));
@@ -173,7 +243,7 @@ function updatePlayer(dtSec) {
 }
 
 function tryDropEmber() {
-  if (elapsedMs - lastEmberDropAt < EMBER_COOLDOWN_MS) return;
+  if (elapsedMs - lastEmberDropAt < level.emberCooldownMs) return;
   lastEmberDropAt = elapsedMs;
   embers.push({ x: player.x, y: player.y, droppedAt: elapsedMs });
 }
@@ -185,26 +255,28 @@ function tryDropEmber() {
 //   3. a short idle/patrol grace period only applies before anything has
 //      ever been lit
 function updateBeast(dtSec) {
-  const hotEmbers = embers.filter(e => elapsedMs - e.droppedAt < EMBER_LIFETIME_MS);
+  const hotEmbers = embers.filter(e => elapsedMs - e.droppedAt < level.emberLifetimeMs);
 
   if (hotEmbers.length > 0) {
     const newest = hotEmbers[hotEmbers.length - 1];
     beast.state = "chase-ember";
-    moveToward(beast, newest, BEAST_CHASE_SPEED, dtSec);
+    moveToward(beast, newest, level.beastSpeed, dtSec);
   } else if (elapsedMs < BEAST_IDLE_SECONDS * 1000 && embers.length === 0) {
     beast.state = "idle";
     moveToward(beast, beast.patrolTarget, BEAST_PATROL_SPEED, dtSec);
   } else {
     beast.state = "chase-torch";
-    moveToward(beast, player, BEAST_CHASE_SPEED, dtSec);
+    moveToward(beast, player, level.beastSpeed, dtSec);
   }
 }
 
 function checkWinLose() {
-  if (dist(player, SAFE_ZONE) < SAFE_ZONE.r + PLAYER_RADIUS) {
+  if (dist(player, level.safeZone) < level.safeZone.r + PLAYER_RADIUS) {
     gameOver = "won";
     overlayMsgEl.style.color = "#8fe38f";
-    overlayMsgEl.textContent = "YOU REACHED SAFETY — press R to restart";
+    overlayMsgEl.textContent = levelIndex < LEVELS.length - 1
+      ? "YOU REACHED SAFETY — press N for the next level"
+      : "ALL THREE LEVELS CLEAR — press Shift+R to start over";
   } else if (dist(player, beast) < PLAYER_RADIUS + BEAST_RADIUS) {
     gameOver = "lost";
     overlayMsgEl.style.color = "#e37d7d";
@@ -218,11 +290,11 @@ function drawWorld() {
   ctx.fillRect(0, 0, W, H);
 
   ctx.fillStyle = "#3a2f22";
-  for (const o of OBSTACLES) ctx.fillRect(o.x, o.y, o.w, o.h);
+  for (const o of level.obstacles) ctx.fillRect(o.x, o.y, o.w, o.h);
 
   // safe zone (stone circle)
   ctx.beginPath();
-  ctx.arc(SAFE_ZONE.x, SAFE_ZONE.y, SAFE_ZONE.r, 0, Math.PI * 2);
+  ctx.arc(level.safeZone.x, level.safeZone.y, level.safeZone.r, 0, Math.PI * 2);
   ctx.fillStyle = "#8a8a78";
   ctx.fill();
   ctx.strokeStyle = "#cfcfae";
@@ -232,7 +304,7 @@ function drawWorld() {
   // embers (glow marks on the ground, fade after they stop being hot)
   for (const e of embers) {
     const age = elapsedMs - e.droppedAt;
-    const alpha = Math.max(0, 1 - Math.max(0, age - EMBER_LIFETIME_MS) / EMBER_FADE_MS);
+    const alpha = Math.max(0, 1 - Math.max(0, age - level.emberLifetimeMs) / EMBER_FADE_MS);
     if (alpha <= 0) continue;
     const grad = ctx.createRadialGradient(e.x, e.y, 0, e.x, e.y, 10);
     grad.addColorStop(0, `rgba(255,140,40,${alpha})`);
@@ -279,9 +351,9 @@ function drawFog() {
   punchHole(player.x, player.y, TORCH_RADIUS);
   for (const e of embers) {
     const age = elapsedMs - e.droppedAt;
-    const t = Math.max(0, 1 - age / EMBER_LIFETIME_MS);
+    const t = Math.max(0, 1 - age / level.emberLifetimeMs);
     const r = EMBER_RADIUS * (0.35 + 0.65 * t); // shrinks as it cools
-    if (t > 0 || age - EMBER_LIFETIME_MS < EMBER_FADE_MS) {
+    if (t > 0 || age - level.emberLifetimeMs < EMBER_FADE_MS) {
       punchHole(e.x, e.y, Math.max(20, r));
     }
   }
@@ -313,7 +385,7 @@ function drawDebug() {
 
   // beast target crosshair
   let targetPt = null;
-  const hotEmbers = embers.filter(e => elapsedMs - e.droppedAt < EMBER_LIFETIME_MS);
+  const hotEmbers = embers.filter(e => elapsedMs - e.droppedAt < level.emberLifetimeMs);
   if (hotEmbers.length > 0) targetPt = hotEmbers[hotEmbers.length - 1];
   else if (beast.state !== "idle") targetPt = player;
   if (targetPt) {
@@ -350,7 +422,7 @@ function frame(ts) {
   drawFog();
   drawDebug();
 
-  const cooldownLeft = Math.max(0, EMBER_COOLDOWN_MS - (elapsedMs - lastEmberDropAt));
+  const cooldownLeft = Math.max(0, level.emberCooldownMs - (elapsedMs - lastEmberDropAt));
   emberStatusEl.textContent = cooldownLeft > 0
     ? `ember: cooling (${(cooldownLeft / 1000).toFixed(1)}s)`
     : "ember: ready";
