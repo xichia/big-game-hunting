@@ -39,6 +39,9 @@ open prototypes/trail-of-embers/index.html
 - **G** — toggle debug view (shows torch/ember radii and the beast's current AI state + target line)
 - **Esc / quit** — not implemented; just close the browser tab (there is no launch menu to exit from)
 
+Prototype testing shortcut:
+- Press number keys 1–5 to jump directly to a level.
+
 ## Level / challenge structure
 
 Five fixed, hand-placed levels (three from Challenge Pass 1, one larger maze

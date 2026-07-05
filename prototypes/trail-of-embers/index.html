@@ -325,6 +325,13 @@ window.addEventListener("keydown", (e) => {
     loadLevel(levelIndex + 1);
   }
   if (e.key.toLowerCase() === "g") debugView = !debugView;
+
+  if (/^[1-9]$/.test(e.key)) {
+    const num = parseInt(e.key, 10);
+    if (num <= LEVELS.length) {
+      loadLevel(num - 1);
+    }
+  }
 });
 window.addEventListener("keyup", (e) => keys.delete(e.key.toLowerCase()));
 
