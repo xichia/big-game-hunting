@@ -28,6 +28,12 @@
     background: #06120a;
     border: 1px solid #333;
     image-rendering: pixelated;
+    /* Scale the display down to fit the viewport on smaller screens/windows
+       while keeping the intrinsic field-pixel resolution (and therefore all
+       collision/coordinate math) untouched -- a plain aspect-ratio-preserving
+       CSS shrink, not a camera or responsive-layout system. */
+    max-width: 96vw;
+    max-height: 88vh;
   }
   #overlay-msg {
     position: absolute;
@@ -81,7 +87,8 @@ const LEVEL_DEFAULTS = {
 };
 
 // Challenge Pass 1 gave us three fixed, hand-placed levels; Scale Pass 1
-// adds a fourth, larger maze level. Only simple data varies per level --
+// added a fourth, larger maze level; the Fullscreen/Larger Maze Pass adds a
+// fifth, larger still. Only simple data varies per level --
 // starts, safe zone, obstacle rectangles, playfield size, and beast speed /
 // ember tuning. Obstacles block the player but never the beast, which
 // still walks straight through walls by design.
@@ -186,6 +193,72 @@ const LEVELS = [
       { x: 750,  y: 270, w: 26,  h: 90 },
       // final weave before the stone circle
       { x: 1080, y: 0,   w: 26,  h: 100 },
+    ],
+  },
+  {
+    name: "The Deep Maze",
+    // Fullscreen/Larger Maze Pass: one larger (1600x900), tighter maze --
+    // bigger and more maze-like than level 4, still hand-authored. Four
+    // horizontal bands split the field into a bottom orientation chamber,
+    // a weaving middle hall, a landmark hall, and a top approach corridor.
+    // Intended route: exit the start chamber's single gap into the weave
+    // hall, thread the two baffles, take the main band gap up past the
+    // landmark block, skirt the bait nook, and thread the final weave to
+    // the circle. A second start-band gap tempts with a shortcut straight
+    // up into a sealed pocket (the one dead end); a narrow gap under the
+    // landmark block is a bail-out that drops straight from the weave hall
+    // into the landmark hall, skipping the far baffle if the beast is
+    // closing in. Tuning: beast speed sits just above level 4's, since the
+    // even bigger field further amplifies its wall-ghosting advantage;
+    // ember cooldown/lifetime reuse level 4's numbers (same emergent
+    // three-hot-ember limit).
+    fieldW: 1600,
+    fieldH: 900,
+    playerStart: { x: 70, y: 830 },
+    beastStart: { x: 820, y: 560 },
+    safeZone: { x: 1530, y: 80, r: 28 },
+    beastSpeed: 145,
+    emberCooldownMs: 1500,
+    emberLifetimeMs: 4000,
+    obstacles: [
+      // start band (y=676) -- gap at x550-800 is the real exit; the wide
+      // gap at x1300-1500 looks identical but only leads to a sealed pocket
+      { x: 0,    y: 676, w: 550, h: 24 },
+      { x: 800,  y: 676, w: 500, h: 24 },
+      { x: 1500, y: 676, w: 100, h: 24 },
+      // small low wall in the start chamber -- teaches wall-sliding early,
+      // clear of both the player start and the exit gap
+      { x: 280,  y: 760, w: 140, h: 24 },
+      // weave hall baffles: first hangs from the band above (pass low),
+      // second rises from the band below (pass high) -- the same
+      // over/under weave motif as level 4, one more step
+      { x: 650,  y: 476, w: 26,  h: 120 },
+      { x: 900,  y: 576, w: 26,  h: 100 },
+      // dead-end pocket walls -- sealed at the top by the band above, the
+      // one part of the map that looks like a shortcut and isn't
+      { x: 1300, y: 476, w: 26,  h: 200 },
+      { x: 1500, y: 476, w: 26,  h: 200 },
+      // mid band (y=452) -- narrow bail-out gap at x750-800 drops straight
+      // from the weave hall to the landmark hall; main gap at x950-1150 is
+      // the full route; the rest seals the dead-end pocket's top
+      { x: 0,    y: 452, w: 750, h: 24 },
+      { x: 800,  y: 452, w: 150, h: 24 },
+      { x: 1150, y: 452, w: 450, h: 24 },
+      // landmark hall: one large block, a recognizable waypoint you can
+      // loop around either side; the bail-out gap above drops in right
+      // beside it
+      { x: 700,  y: 280, w: 200, h: 150 },
+      // bait nook -- a shallow pocket open only at the top, right beside
+      // the final gap; step in, drop an ember, climb back out and past
+      { x: 1150, y: 350, w: 26,  h: 100 },
+      { x: 1300, y: 350, w: 26,  h: 100 },
+      { x: 1150, y: 426, w: 176, h: 24 },
+      // top band (y=228) -- single gap at x1350-1500 into the final approach
+      { x: 0,    y: 228, w: 1350, h: 24 },
+      { x: 1500, y: 228, w: 100,  h: 24 },
+      // final weave before the stone circle -- forces a lateral jog left
+      // before the last climb up to the circle
+      { x: 1480, y: 100, w: 26,  h: 128 },
     ],
   },
 ];
@@ -333,7 +406,7 @@ function checkWinLose() {
     overlayMsgEl.style.color = "#8fe38f";
     overlayMsgEl.textContent = levelIndex < LEVELS.length - 1
       ? "YOU REACHED SAFETY — press N for the next level"
-      : "ALL FOUR LEVELS CLEAR — press Shift+R to start over";
+      : "ALL FIVE LEVELS CLEAR — press Shift+R to start over";
   } else if (dist(player, beast) < PLAYER_RADIUS + BEAST_RADIUS) {
     gameOver = "lost";
     overlayMsgEl.style.color = "#e37d7d";

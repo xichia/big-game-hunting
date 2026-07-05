@@ -2,18 +2,22 @@
 
 ARTIFACT TYPE: Probe (playable prototype)
 AUTHORITY: PROBE
-STATUS: Draft — Scale Pass 1 untested, human-gated
+STATUS: Draft — Fullscreen/Larger Maze Pass untested, human-gated
 SOURCE-OF-TRUTH FILES TOUCHED: none
 
 This is the playable build for the probe defined in
 `artifacts/probes/0002-trail-of-embers-probe-brief.md`, extended by a
 bounded Challenge Pass 1 after the first playtest
 (`artifacts/playtests/0001-trail-of-embers-first-playtest.md`) came back
-positive but easy, and then by a bounded Scale Pass 1 after Challenge
-Pass 1 (`artifacts/playtests/0002-trail-of-embers-challenge-pass-1-playtest.md`)
-leaned GREEN and named "bigger, maze-like maps" as the next design vector.
-It does not choose Trail of Embers as the final game, does not authorize
-production implementation, and is not itself a playtest result.
+positive but easy, then by a bounded Scale Pass 1 after Challenge Pass 1
+(`artifacts/playtests/0002-trail-of-embers-challenge-pass-1-playtest.md`)
+leaned GREEN and named "bigger, maze-like maps" as the next design vector,
+and now by a bounded Fullscreen/Larger Maze Pass after Scale Pass 1
+(`artifacts/playtests/0003-trail-of-embers-scale-pass-1-playtest.md`) leaned
+GREEN and recommended testing a still-larger, tighter, more complicated map
+using more of the browser window. It does not choose Trail of Embers as the
+final game, does not authorize production implementation, and is not itself
+a playtest result.
 
 ## How to run
 
@@ -37,12 +41,13 @@ open prototypes/trail-of-embers/index.html
 
 ## Level / challenge structure
 
-Four fixed, hand-placed levels (three from Challenge Pass 1, plus one
-larger maze from Scale Pass 1). The HUD shows the current level. Winning a
-level offers **N** to continue; losing restarts the same level with **R**.
-The core loop is identical in all four — only simple per-level data varies
-(start positions, safe zone, obstacle rectangles, playfield size, and
-per-level beast speed and ember tuning).
+Five fixed, hand-placed levels (three from Challenge Pass 1, one larger maze
+from Scale Pass 1, and one larger still from the Fullscreen/Larger Maze
+Pass). The HUD shows the current level. Winning a level offers **N** to
+continue; losing restarts the same level with **R**. The core loop is
+identical in all five — only simple per-level data varies (start positions,
+safe zone, obstacle rectangles, playfield size, and per-level beast speed
+and ember tuning).
 
 1. **First Light** — the exact layout and tuning from the successful first
    playtest, unchanged. Slightly easy on purpose: teaches ember-as-bait.
@@ -87,6 +92,58 @@ per-level beast speed and ember tuning).
      speed 140 sits between levels 1–2 (130) and level 3 (150), because the
      larger field amplifies the wall-ghosting beast's straight-line
      advantage over the player's walled routes.
+5. **The Deep Maze** (Fullscreen/Larger Maze Pass) — one larger still
+   hand-authored maze on a 1600×900 playfield (~1.25× the area of level 4).
+   Four horizontal bands divide the field into a bottom orientation
+   chamber, a weaving middle hall, a landmark hall, and a top approach
+   corridor. The intended route: leave the start chamber through its one
+   real gap, thread the weave hall's two baffles (pass low, then high),
+   take the main band gap up past a large landmark block, skirt the bait
+   nook beside the final gap, then thread one last lateral jog to the
+   circle. Deliberate design beats:
+   - **Orientation chamber** — the start chamber has one real exit gap and
+     a small low wall placed clear of both the start and the exit, so the
+     player learns wall-sliding before anything is chasing them.
+   - **Fair dead end** — a second, equally wide gap in the start band looks
+     like an identical shortcut but only leads to a pocket sealed at the
+     top: one failed attempt teaches the map, same as level 4's shaft.
+   - **Bail-out loop** — a narrow gap in the band above the weave hall
+     drops straight down beside the landmark block, letting a chased player
+     duck between the weave hall and the landmark hall without finishing
+     the far baffle, distinct from the dead end.
+   - **Landmark** — one large block sits alone in the landmark hall as a
+     recognizable waypoint you loop around either side of; the bail-out gap
+     surfaces right beside it.
+   - **Planned bait pocket** — a shallow nook open only at the top sits
+     beside the final gap into the approach corridor: step in, drop an
+     ember, climb back out and past while the beast dives in.
+   - **Map-memory moment** — the final approach corridor forces one more
+     lateral jog before the circle, rewarding players who remember the
+     layout instead of beelining.
+   - **Tuning** — reuses level 4's ember numbers (1.5s cooldown / 4.0s
+     lifetime); beast speed 145 sits just above level 4's 140, since the
+     still-larger field further amplifies the wall-ghosting advantage.
+   - **Display** — the canvas now has a CSS `max-width`/`max-height` cap
+     (96vw / 88vh) so it shrinks to fit smaller browser windows while
+     keeping its field-pixel resolution (and therefore all collision math)
+     unchanged; on a large enough monitor it displays near-native size.
+     This is a plain aspect-ratio-preserving scale, not a camera or
+     responsive-layout system.
+
+## What changed in the Fullscreen/Larger Maze Pass
+
+- Level 5, "The Deep Maze," as described above — new level data only.
+- The canvas gained a CSS `max-width: 96vw; max-height: 88vh` cap so larger
+  levels scale down to fit the browser window instead of overflowing it.
+  This is display-only: canvas width/height attributes (and therefore all
+  in-game coordinates and collision) are unchanged, and levels 1–4 are
+  unaffected in practice since none of them approach that cap on a normal
+  screen.
+- The final win message now says five levels instead of four.
+
+Nothing else changed in this pass: beast AI rules, torch/ember/fog
+rendering, the debug overlay, collision, win/lose conditions, controls, the
+restart flow, and levels 1–4 are untouched.
 
 ## What changed in Scale Pass 1
 
@@ -94,7 +151,7 @@ per-level beast speed and ember tuning).
 - Per-level playfield size: `LEVELS` entries may specify `fieldW`/`fieldH`,
   defaulting to the original 900×560. The canvas, fog layer, and HUD resize
   on level load. Levels 1–3 are pixel-identical to Challenge Pass 1.
-- The final win message now says four levels instead of three.
+- The final win message now said four levels instead of three.
 
 Nothing else changed in this pass: beast AI rules, torch/ember/fog
 rendering, the debug overlay, collision, win/lose conditions, controls, and
@@ -137,6 +194,37 @@ larger and more maze-like — with difficulty coming from route learning,
 memory, timing, and bait placement, not from unreadability. Bigger, not
 broader: no new systems were added.
 
+The Fullscreen/Larger Maze Pass sharpens the same axis into one question:
+**can Trail of Embers create controlled disorientation that is learnable,
+fair, tense, and retryable on a larger, more maze-like map?** Scale Pass 1's
+playtest leaned GREEN and drew the line between two outcomes to watch for
+going forward:
+
+> Good lost: "I do not know the map yet, but I can learn it."
+> Bad lost: "I do not understand what happened or where I can go."
+
+Level 5 is bigger and tighter than level 4, not broader: no new systems, no
+new enemy, no procedural generation — only more deliberate route structure
+(an orientation chamber, a weave, a fair dead end, a bail-out loop, a
+landmark, a bait pocket, and a final memory-reward approach) plus a display
+change (CSS canvas scaling) so the larger field is comfortable in more
+browser windows.
+
+## Fullscreen/Larger Maze Pass Playtest
+
+Run the new larger level (5, "The Deep Maze") at least 3 times.
+
+1. Did the larger/fullscreen map feel more exciting than Level 4?
+2. Did it create "good lost" or "bad lost"?
+3. Could you form a better route after one or two failed attempts?
+4. Did landmarks, loops, or spatial motifs help you learn the map?
+5. Did any dead end feel fair rather than cheap?
+6. Did embers still feel like planned tools rather than panic spam?
+7. Did beast ghosting remain fair at this scale?
+8. Was beast pressure too low, too high, or about right?
+9. Did the full-window or larger canvas feel comfortable?
+10. Is this larger-map direction more promising than adding new mechanics?
+
 ## Playtest questions for the scale pass (level 4)
 
 - Can a plan be formed after one or two failed attempts, or does the maze
@@ -175,9 +263,11 @@ broader: no new systems were added.
 
 ## What's implemented
 
-- Four fixed single-screen dark levels (not procedural), each a handful of
-  hardcoded obstacle rectangles. Levels 1–3 run at 900×560; level 4 runs at
-  1280×760 (the canvas resizes per level — no scrolling camera).
+- Five fixed single-screen dark levels (not procedural), each a handful of
+  hardcoded obstacle rectangles. Levels 1–3 run at 900×560, level 4 at
+  1280×760, level 5 at 1600×900 (the canvas resizes per level — no
+  scrolling camera; a CSS `max-width`/`max-height` cap shrinks the display
+  to fit smaller windows without changing field-pixel coordinates).
 - Player movement (8-directional, arrow keys/WASD) with simple
   circle-vs-rectangle collision against obstacles.
 - Constant torch radius around the player — this is the player's baseline
@@ -215,12 +305,14 @@ broader: no new systems were added.
 
 ## What's intentionally missing (per the probe brief's non-goals)
 
-- No procedural generation — all four levels are hardcoded data.
-- No scrolling camera or viewport system — level 4's bigger space comes
-  from a bigger canvas, so the whole field stays on screen (the fog is what
-  hides it). If maps grow past comfortable monitor size, a camera becomes a
-  real (currently unauthorized) decision.
-- No explicit ember inventory/cap — level 4 keeps the three-ember limit
+- No procedural generation — all five levels are hardcoded data.
+- No true responsive/fullscreen layout, camera, or viewport system —
+  level 5's bigger space comes from a bigger canvas plus a CSS scale-to-fit
+  cap, so the whole field is still always fully rendered (the fog is what
+  hides it), just displayed smaller on tight windows. If maps grow past
+  what a CSS scale can keep comfortable, a camera becomes a real (currently
+  unauthorized) decision.
+- No explicit ember inventory/cap — levels 4–5 keep the three-ember limit
   emergent from cooldown/lifetime tuning, same as level 3.
 - No adaptive/learning AI, no new enemy types — the three rules above are
   the entire beast behavior in every level.
@@ -233,7 +325,7 @@ broader: no new systems were added.
   only difficulty steps for the challenge pass, not a progression system.
 - No final art — programmer-art circles and rectangles only.
 - No walls blocking the beast (it ignores obstacles by design, per "no
-  pathfinding beyond direct movement toward the target point"). Levels 2–4
+  pathfinding beyond direct movement toward the target point"). Levels 2–5
   deliberately lean on this: walls slow *you*, never it.
 
 ## GREEN / RED criteria (summarized from the probe brief)
