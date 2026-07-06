@@ -2,7 +2,7 @@
 
 ARTIFACT TYPE: Probe (playable prototype)
 AUTHORITY: PROBE
-STATUS: Draft — Fullscreen/Larger Maze Pass untested, human-gated
+STATUS: Draft — Cinder Cache pass, Revision 3 (cache now grants a stored, spend-later Cinder Charge instead of an immediate effect, per Ian's playtest of Revision 2) untested, human-gated
 SOURCE-OF-TRUTH FILES TOUCHED: none
 
 This is the playable build for the probe defined in
@@ -12,12 +12,14 @@ bounded Challenge Pass 1 after the first playtest
 positive but easy, then by a bounded Scale Pass 1 after Challenge Pass 1
 (`artifacts/playtests/0002-trail-of-embers-challenge-pass-1-playtest.md`)
 leaned GREEN and named "bigger, maze-like maps" as the next design vector,
-and now by a bounded Fullscreen/Larger Maze Pass after Scale Pass 1
+then by a bounded Fullscreen/Larger Maze Pass after Scale Pass 1
 (`artifacts/playtests/0003-trail-of-embers-scale-pass-1-playtest.md`) leaned
 GREEN and recommended testing a still-larger, tighter, more complicated map
-using more of the browser window. It does not choose Trail of Embers as the
-final game, does not authorize production implementation, and is not itself
-a playtest result.
+using more of the browser window, and now by a bounded Cinder Cache pass
+that adds the probe's first positive collectible (see below) alongside a
+seventh level. It does not choose Trail of Embers as the final game, does
+not authorize production implementation, and is not itself a playtest
+result.
 
 ## How to run
 
@@ -32,7 +34,7 @@ open prototypes/trail-of-embers/index.html
 ## Controls
 
 - **Arrow keys / WASD** — move
-- **Space** — drop an ember at your current position
+- **Space** — drop an ember at your current position (Space input is now edge-triggered/tap-based globally; holding Space no longer auto-repeats ember drops, and players must tap Space for each ember to support the Cinder Charge safely)
 - **R** — restart the **current level** at any time (including after win/loss)
 - **N** — advance to the next level (only after winning the current one)
 - **Shift+R** — full reset back to level 1
@@ -40,18 +42,19 @@ open prototypes/trail-of-embers/index.html
 - **Esc / quit** — not implemented; just close the browser tab (there is no launch menu to exit from)
 
 Prototype testing shortcut:
-- Press number keys 1–6 to jump directly to a level.
+- Press number keys 1–7 to jump directly to a level.
 
 ## Level / challenge structure
 
-Six fixed, hand-placed levels (three from Challenge Pass 1, one larger maze
-from Scale Pass 1, one larger still from the Fullscreen/Larger Maze Pass,
-and one bigger and tighter still from the bounded maze pass). The HUD shows
-the current level. Winning a level offers **N** to continue; losing
-restarts the same level with **R**. The core loop is identical in all
-six — only simple per-level data varies (start positions, safe zone,
-obstacle rectangles, playfield size, and per-level beast speed and ember
-tuning).
+Seven fixed, hand-placed levels (three from Challenge Pass 1, one larger
+maze from Scale Pass 1, one larger still from the Fullscreen/Larger Maze
+Pass, one bigger and tighter still from the bounded maze pass, and one from
+the Cinder Cache pass that introduces the probe's first positive
+collectible). The HUD shows the current level. Winning a level offers **N**
+to continue; losing restarts the same level with **R**. The core loop is
+identical in all seven — only simple per-level data varies (start
+positions, safe zone, obstacle rectangles, playfield size, per-level beast
+speed and ember tuning, and — only on level 7 — Cinder Cache placement).
 
 1. **First Light** — the exact layout and tuning from the successful first
    playtest, unchanged. Slightly easy on purpose: teaches ember-as-bait.
@@ -163,6 +166,151 @@ tuning).
      145) since the extra band and tighter gaps further amplify the
      wall-ghosting straight-line advantage; ember cooldown/lifetime reuse
      levels 4–5's numbers (same emergent three-hot-ember limit).
+7. **The Ember Ring** (Cinder Cache pass, level redesigned after Ian's
+   playtest — see "Revision 2" below) — same 1800×1000 scale as level 6
+   (same approximate size, per Ian's direction), but a genuinely different
+   spatial problem, not another banded coil: one open **arena** ringed by
+   just two boundary walls (arena-to-start, arena-to-corridor), each with a
+   single gap, split by one **central island** into two lanes. Deliberate
+   design beats:
+   - **Two lanes, two different risks** — the west lane (direct) has the
+     beast starting right in it (700,550): fast, short, and risky because
+     you meet the beast cold, with no time to prepare a bait. The east lane
+     (the long way round) starts far from the beast and buys real time —
+     safer at first — but both lanes funnel back through the same single
+     exit gap on the west side, so an east-lane player still has to cross
+     back over the open strip above the island, directly between the
+     beast's den and the exit. That crossing is the level's one
+     unavoidable exposed moment, regardless of which lane you took.
+   - **Cinder Cache, off the direct route entirely** — a sealed alcove
+     (roofed and walled on three sides, open only from the lane side, the
+     same proven "out-and-back, no shortcut" shape as level 5's bait nook)
+     sits on the far east wall, ~550px off the island and nowhere near the
+     west lane. Skipping it costs nothing extra. Fetching it costs real
+     distance and time, and risks being cornered in a dead end if the
+     beast is already in pursuit.
+   - **Where the payoff lands** — the cache grants a held Cinder Charge
+     (see "Revision 3" below) rather than an immediate effect, and the
+     level's one unavoidable exposed crossing back toward the beast's side
+     of the map is the moment that charge is *for*: get caught there
+     mid-cooldown and spending it is a felt, plausible save — without ever
+     being mandatory, since the level is fully finishable without it.
+   - **Final weave** — a small tight S-turn (two baffles) between the exit
+     gap and the circle, the same "weave before the goal" motif as earlier
+     levels, at a much smaller scale.
+   - **Tuning** — keeps level 6's beast speed (150) and the first Cinder
+     Cache draft's longer ember cooldown (3500ms vs. 1500ms everywhere
+     else), since a longer cooldown is what makes both a normal drop and a
+     spent charge feel consequential; ember lifetime (4000ms) is unchanged.
+
+## What changed in the Cinder Cache pass
+
+- Level 7, "The Ember Ring," as described above — new level data only.
+- One new mechanic: the **Cinder Cache**, a collectible that only exists on
+  levels whose data lists one (currently level 7 only). See "What's
+  implemented" below.
+- The final win message now says seven levels instead of six (and is no
+  longer hardcoded to a specific number).
+- `validate-levels.js` gained bounds/obstacle-clearance/reachability checks
+  for any level's `cinderCaches` entries (see "revision" notes below).
+
+Nothing else changed in this pass: beast AI rules, torch/ember/fog
+rendering, the debug overlay, collision, win/lose conditions, controls, the
+restart flow, player/beast speed, collision radii, ember cooldown/duration
+on levels 1–6, and levels 1–6's level data are untouched.
+
+### Revision 1 (post-audit)
+
+A first draft of this pass was reviewed and sent back (FAIL/REVISE) because
+the detour wasn't actually a detour, the reward often did nothing, cache
+reachability wasn't validated, and pickup had no feedback. This revision
+(still on the original "Cinder Hoard" map, a banded coil like level 6):
+
+- **Reshaped the nook so the skip route is real.** Widened the gap under
+  the nook to a full-width, always-clear 40px lane, and moved the beast's
+  start into the nook itself so fetching the cache meant stepping into its
+  den, not just passing near it.
+- **Gave level 7 its own ember cooldown** (3500ms, up from 1500ms) so the
+  cache's refresh is a felt event.
+- **Added pickup feedback**: a brief expanding glow-pop at the pickup point
+  (`cacheBursts`, self-clearing after 500ms) and a short HUD message
+  ("cinder cache collected — ember ready!", `#cache-status`, ~900ms).
+- **Extended `validate-levels.js`** to BFS-check each Cinder Cache's
+  reachability from the player start.
+
+### Revision 2 (post-Ian-playtest — new map)
+
+Ian then playtested Revision 1 and sent it back on design grounds, not
+mechanical ones: the mechanic worked, but "The Cinder Hoard" was still
+level 6's banded-coil map with a nook added, so the cache route was never a
+real decision — straightforward to fetch, unnecessary, and it "felt like a
+distracting gimmick" rather than something specifically useful for the
+level. His call: keep the mechanic, same approximate size is fine, but it
+needs to be a genuinely new map built around the collectible.
+
+This revision replaces the level 7 map entirely with "The Ember Ring" (an
+open arena split by one central island into a direct lane past the beast
+and a longer, safer lane around it — see the level-7 description above) and
+relocates the Cinder Cache into a sealed alcove off the long lane, timed so
+its payoff (a refreshed ember) lands on the one exposed crossing every
+route must eventually make. Nothing about the mechanic itself changed from
+Revision 1: touching the cache still just refreshes the ember cooldown,
+with the same feedback, the same `cinderCaches`/`CACHE_RADIUS` plumbing, and
+the same `validate-levels.js` checks (bounds, obstacle clearance,
+reachability) — only level 7's map/beast-start/cache-position data changed.
+
+No new files, no new levels, no scope beyond level 7's data; levels 1–6 and
+the core loop are untouched.
+
+### Revision 3 (post-Ian-playtest — stored charge, mechanic change)
+
+Ian playtested Revision 2's new map and called it "way better" — the arena
+and lane choice landed — but said the cache was "still not really
+necessary." His diagnosis: Revision 1/2's cache spent itself the instant
+you touched it (an immediate cooldown refresh), which is only ever useful
+if you happen to touch it at exactly the right moment relative to your own
+cooldown — otherwise it's a no-op. His fix: don't spend it immediately.
+Keep it as a held, stored one-use resource you can spend later, whenever
+you actually need it. That way the level doesn't have to force a single
+"correct" pickup moment — it only has to teach that the resource exists and
+that it's yours to use if a moment calls for it.
+
+This revision keeps Revision 2's map (The Ember Ring) and cache placement
+entirely unchanged — same alcove, same position, same `cinderCaches` entry
+— and changes only what touching the cache *does*:
+
+- **Cinder Cache** (the collectible on the ground): unchanged — a
+  collectible placed in level data, removed on touch. It now grants one
+  stored **Cinder Charge** instead of an immediate cooldown refresh. The
+  player can hold at most one at a time (moot on level 7, which places only
+  one cache, but the code caps it defensively).
+- **Cinder Charge** (the new held resource): while the normal ember
+  cooldown is ready, pressing **Space** drops a normal ember exactly as
+  before and the held charge is untouched — fetching the cache and then
+  dropping embers normally never wastes it. While the normal cooldown is
+  *not* ready, pressing **Space** with a charge held consumes it and drops
+  an ember immediately; spending it does not affect or reset the normal cooldown clock,
+  allowing the original normal cooldown to continue running in the background. No new control —
+  still just **Space**, reusing the
+  existing ember-drop input.
+- **Feedback**: pickup shows "cinder charge ready" (`#cache-status`,
+  ~900ms, same slot/timing as the old pickup message); while a charge is
+  held and no other cache message is active, the same span shows a
+  lightweight persistent "cinder charge: held" status; spending it shows
+  "cinder charge spent" (~900ms). All three share the one `#cache-status`
+  HUD span — no new UI element. An ember dropped by spending a charge also
+  gets one tiny, cheap visual tell (its sprite's hot core swaps to the
+  cache's near-white color instead of pale yellow) so an attentive player
+  can tell which kind of drop just happened, without a new silhouette.
+- **Reset scope**: the held charge (and the pickup/spend message timers)
+  reset with the rest of level state on **R**/**Shift+R**, same as the
+  cache itself — no carryover between levels or across a restart, per the
+  brief.
+
+Levels 1–6, the map/tuning/beast-start/cache-position data for level 7, and
+`validate-levels.js` are all unchanged from Revision 2 — this revision only
+touches the mechanic's runtime behavior (`tryDropEmber`, the pickup
+handler, and the HUD status text) in `index.html`.
 
 ## What changed in the bounded maze pass
 
@@ -254,6 +402,54 @@ landmark, a bait pocket, and a final memory-reward approach) plus a display
 change (CSS canvas scaling) so the larger field is comfortable in more
 browser windows.
 
+The Cinder Cache pass adds the probe's first new axis since the original
+brief: **does a positive collectible add decision-richness to the core
+loop, or does it dilute the light-as-bait tension?** Levels 1–6 tested the
+loop under increasing spatial and scale pressure with no new mechanics;
+level 7 asks whether a single, optional, legible pickup — now a stored,
+spend-whenever-you-need-it charge rather than an immediate effect — can
+make route planning richer (a detour worth weighing, and a resource worth
+banking) without turning into a chore, a required key, or a way to
+trivially out-run the beast.
+
+## Cinder Cache Pass Playtest
+
+Run level 7, "The Ember Ring," at least 3 times — at least once taking the
+west (direct) lane, once taking the east lane and fetching the cache and
+later spending the charge, and once finishing the level without ever
+fetching the cache at all.
+
+1. Did level 7 feel like a genuinely new map — an arena and a lane choice —
+   rather than level 6's coil with a pickup added?
+2. Did the west lane read as risky specifically because it drops you near
+   the beast immediately, versus the east lane buying you real distance?
+3. Did fetching the cache feel like a deliberate detour that cost you time
+   and position (and risked a corner in the alcove if the beast was
+   already close), rather than a pickup sitting on the path you were
+   already taking?
+4. Did skipping the cache and taking the east lane straight to the exit
+   feel just as viable as fetching it — no implicit penalty for skipping,
+   and no sense that the level required it?
+5. Did holding the charge feel legible — did the "cinder charge: held" HUD
+   status make it clear you were carrying something without checking a
+   menu — and did a moment later in the level (most likely the exposed
+   crossing back toward the beast's den) make you actually want to spend
+   it, rather than it going unused the whole run?
+6. Did the pickup register clearly — the glow-pop and "cinder charge
+   ready" message — even on a run where your own ember cooldown had
+   already lapsed?
+7. Did spending the charge mid-cooldown read clearly as a deliberate save
+   (the "cinder charge spent" message, the tinted ember) rather than a
+   confusing extra ember appearing?
+8. Did the charge ever feel like it trivialized the level (freely spamming
+   embers) rather than adding one held-in-reserve option?
+9. Was the cache, the held-charge status, or a charge-spent ember ever
+   confused with a dropped ember or the safe zone at a glance?
+10. Did beast ghosting still read as fair on this map?
+11. Compared to Revision 2 (immediate refresh on pickup), did holding the
+    charge for later make the cache feel more worth fetching, or did it
+    still feel unnecessary?
+
 ## Fullscreen/Larger Maze Pass Playtest
 
 Run the new larger level (5, "The Deep Maze") at least 3 times.
@@ -307,19 +503,43 @@ Run the new larger level (5, "The Deep Maze") at least 3 times.
 
 ## What's implemented
 
-- Six fixed single-screen dark levels (not procedural), each a handful of
+- Seven fixed single-screen dark levels (not procedural), each a handful of
   hardcoded obstacle rectangles. Levels 1–3 run at 900×560, level 4 at
-  1280×760, level 5 at 1600×900, level 6 at 1800×1000 (the canvas resizes
-  per level — no scrolling camera; a CSS `max-width`/`max-height` cap
-  shrinks the display to fit smaller windows without changing field-pixel
-  coordinates).
+  1280×760, level 5 at 1600×900, levels 6–7 at 1800×1000 (the canvas
+  resizes per level — no scrolling camera; a CSS `max-width`/`max-height`
+  cap shrinks the display to fit smaller windows without changing
+  field-pixel coordinates).
+- **Cinder Cache / Cinder Charge** (level 7 only): a small pulsing pickup
+  placed via an optional per-level `cinderCaches` array in the level data —
+  levels without the field simply have none. Touching one removes it and
+  grants one stored **Cinder Charge** (at most one held at a time); no
+  inventory menu, no score, no key/lock. The charge does nothing on its
+  own — it's spent later: pressing **Space** while the normal ember
+  cooldown is ready always does a normal drop and leaves the charge
+  untouched; pressing **Space** while the cooldown is *not* ready, with a
+  charge held, consumes the charge and drops an ember immediately,
+  without affecting or resetting the normal cooldown clock. No new control — reuses **Space**. Visually the
+  cache pickup is a small warm diamond sprite with a pulsing near-white
+  core, drawn in the same blocky `PX`-lattice style as everything else —
+  deliberately a different silhouette and animation from the tall, static
+  dropped-ember flame, and much smaller than the safe zone's stone ring, so
+  the three never read as the same thing; an ember dropped by spending a
+  charge gets one tiny visual tell (its hot core swaps to that same
+  near-white color). Feedback is entirely text/glow, no new UI: a brief
+  expanding glow-pop at the pickup point (`cacheBursts`, self-clearing
+  after 500ms), and the one `#cache-status` HUD span cycles between
+  "cinder charge ready" (~900ms on pickup), a persistent "cinder charge:
+  held" while one is banked, and "cinder charge spent" (~900ms on spend).
+  The charge, its pickup/spend message timers, and the cache itself all
+  reset with the rest of level state on **R**/**Shift+R** — no carryover
+  between levels.
 - Player movement (8-directional, arrow keys/WASD) with simple
   circle-vs-rectangle collision against obstacles.
 - Constant torch radius around the player — this is the player's baseline
   visibility, and it also doubles as the beast's default "light event" (see
   AI below).
 - Ember drop (Space, cooldown per level — 0.9s in levels 1–2, 1.5s in
-  level 3 — so holding the key can't spam every frame) that punches a
+  level 3 — Space is now edge-triggered/tap-based globally so holding it no longer auto-repeats, requiring players to tap Space for each ember to support the Cinder Charge safely) that punches a
   larger, temporarily-hot light hole in the fog and registers a light event.
 - Beast AI, in priority order (identical in all levels; only speed varies):
   1. If any dropped ember is still "hot" (5.2s in levels 1–2, 4.0s in
@@ -350,15 +570,20 @@ Run the new larger level (5, "The Deep Maze") at least 3 times.
 
 ## What's intentionally missing (per the probe brief's non-goals)
 
-- No procedural generation — all five levels are hardcoded data.
+- No procedural generation — all seven levels are hardcoded data.
 - No true responsive/fullscreen layout, camera, or viewport system —
   level 5's bigger space comes from a bigger canvas plus a CSS scale-to-fit
   cap, so the whole field is still always fully rendered (the fog is what
   hides it), just displayed smaller on tight windows. If maps grow past
   what a CSS scale can keep comfortable, a camera becomes a real (currently
   unauthorized) decision.
-- No explicit ember inventory/cap — levels 4–6 keep the three-ember limit
+- No explicit ember inventory/cap — levels 4–7 keep the three-ember limit
   emergent from cooldown/lifetime tuning, same as level 3.
+- No Cinder Cache/Charge inventory menu, score, or counter beyond the one
+  collectible present on level 7 and the single held charge it grants (at
+  most one at a time, no carryover between levels or across a restart) —
+  it disappears on pickup and its only effect is a later one-time
+  cooldown-clock reset when spent.
 - No adaptive/learning AI, no new enemy types — the three rules above are
   the entire beast behavior in every level.
 - No randomness anywhere.

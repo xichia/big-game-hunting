@@ -41,11 +41,11 @@ vm.createContext(sandbox);
 
 // Run the game script, then pull out what we need via an appended expression.
 const exports_ = vm.runInContext(
-  src + "\n;({ LEVELS, LEVEL_DEFAULTS, PLAYER_RADIUS, circleRectCollide, W, H })",
+  src + "\n;({ LEVELS, LEVEL_DEFAULTS, PLAYER_RADIUS, CACHE_RADIUS, circleRectCollide, W, H })",
   sandbox,
   { filename: "index.html<script>" }
 );
-const { LEVELS, LEVEL_DEFAULTS, PLAYER_RADIUS, circleRectCollide, W, H } = exports_;
+const { LEVELS, LEVEL_DEFAULTS, PLAYER_RADIUS, CACHE_RADIUS, circleRectCollide, W, H } = exports_;
 console.log(`script evaluated OK; ${LEVELS.length} levels; base field ${W}x${H}`);
 
 let failures = 0;
@@ -54,7 +54,11 @@ function check(cond, msg) {
   else { console.log(`  FAIL ${msg}`); failures++; }
 }
 
-function bfsReachable(level) {
+// BFS from the player start over a player-radius-clearance grid, stopping
+// as soon as it gets within `targetR + PLAYER_RADIUS` of `target`. Shared by
+// the safe-zone reachability check and the Cinder Cache reachability check
+// below -- same clearance logic, different destination.
+function bfsReachable(level, target, targetR) {
   const step = 5;
   const cols = Math.floor(level.fieldW / step), rows = Math.floor(level.fieldH / step);
   const blocked = (x, y) =>
@@ -69,7 +73,7 @@ function bfsReachable(level) {
   while (queue.length) {
     const [cx, cy] = queue.shift();
     const x = cx * step, y = cy * step;
-    if (Math.hypot(x - level.safeZone.x, y - level.safeZone.y) < level.safeZone.r + PLAYER_RADIUS) return true;
+    if (Math.hypot(x - target.x, y - target.y) < targetR + PLAYER_RADIUS) return true;
     for (const [dx, dy] of [[1,0],[-1,0],[0,1],[0,-1]]) {
       const nx = cx + dx, ny = cy + dy;
       if (nx < 0 || ny < 0 || nx >= cols || ny >= rows) continue;
@@ -93,7 +97,16 @@ LEVELS.forEach((raw, i) => {
   check(!level.obstacles.some(o => circleRectCollide(level.safeZone.x, level.safeZone.y, level.safeZone.r, o)),
     "safe zone clear of obstacles");
   check(level.beastSpeed < 175, `beast (${level.beastSpeed}) slower than player (175)`);
-  check(bfsReachable(level), "safe zone reachable from player start (BFS, player-radius clearance)");
+  check(bfsReachable(level, level.safeZone, level.safeZone.r),
+    "safe zone reachable from player start (BFS, player-radius clearance)");
+
+  (level.cinderCaches || []).forEach((c, ci) => {
+    check(inBounds(c), `cinder cache ${ci + 1} in bounds`);
+    check(!level.obstacles.some(o => circleRectCollide(c.x, c.y, CACHE_RADIUS, o)),
+      `cinder cache ${ci + 1} clear of obstacles`);
+    check(bfsReachable(level, c, CACHE_RADIUS),
+      `cinder cache ${ci + 1} reachable from player start (BFS, player-radius clearance)`);
+  });
 });
 
 if (failures) { console.error(`\n${failures} check(s) FAILED`); process.exit(1); }

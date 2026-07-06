@@ -52,6 +52,7 @@
   <div id="hud">
     <span><span class="key">Arrows/WASD</span> move &nbsp; <span class="key">Space</span> ember &nbsp; <span class="key">R</span> retry level &nbsp; <span class="key">N</span> next (after win) &nbsp; <span class="key">Shift+R</span> level 1 &nbsp; <span class="key">G</span> debug</span>
     <span id="level-status"></span>
+    <span id="cache-status"></span>
     <span id="ember-status">ember: ready</span>
   </div>
   <div style="position: relative;">
@@ -74,6 +75,8 @@ const BEAST_IDLE_SECONDS = 1.2;     // brief grace period at level start
 
 const EMBER_RADIUS = 155;           // peak illumination radius
 const EMBER_FADE_MS = 1500;         // trailing fade of the light itself (after it stops being a target)
+
+const CACHE_RADIUS = 11;            // Cinder Cache pickup radius
 
 // Per-level tunables fall back to these baseline values (the exact values
 // the first playtest ran with). fieldW/fieldH let a level use a larger
@@ -363,6 +366,118 @@ const LEVELS = [
       { x: 1680, y: 100, w: 26, h: 80 },
     ],
   },
+  {
+    name: "The Ember Ring",
+    // Cinder Cache pass, twice revised after Ian's playtests.
+    //
+    // Revision 1 replaced the first draft's map ("The Cinder Hoard," levels
+    // 4-6's banded-coil language with a nook stapled on) because the cache
+    // route was never a real decision -- straightforward to fetch, not
+    // necessary, felt like a chore. Ian's call: same approximate size is
+    // fine, but it needs to be a genuinely new map, and the cache needs to
+    // be specifically useful for THIS level, not decorative.
+    //
+    // Revision 2 (this one) keeps that map but changes what the cache DOES.
+    // Revision 1's cache spent itself immediately on pickup (an instant
+    // cooldown refresh), which Ian still called "not really necessary" even
+    // on the new map -- an immediate effect is only ever useful if you touch
+    // it at exactly the right moment. His fix: don't spend it immediately.
+    // Collecting it now grants a held Cinder Charge, usable once, whenever
+    // the player actually needs it later -- so the level only has to teach
+    // that the resource exists, not force a single "correct" pickup moment.
+    //
+    // This is a different spatial problem, not a bigger/tighter version of
+    // the same one: a single open ARENA (not six stacked bands) with one
+    // central island splitting it into two lanes, ringed by just two
+    // boundary walls (arena-to-start, arena-to-corridor), each with exactly
+    // one gap. Same 1800x1000 field as level 6 -- the new axis is still the
+    // collectible and the lane choice it creates, not a bigger map.
+    //
+    //   - West lane (x0-750): the DIRECT route. The beast starts right in
+    //     it (700,550), so this lane means facing the beast almost
+    //     immediately, with no time to prepare a bait. One micro-chokepoint
+    //     (a single 26px-wide wall) is its only texture -- fast, short,
+    //     and risky because you meet the beast cold.
+    //   - East lane (x1050-1800): the LONG WAY ROUND. The beast starts far
+    //     from it, so it buys real distance/time before the beast can close
+    //     in -- safer at first. But both lanes funnel back through the same
+    //     one exit gap (west side, x260-460 @ y300), so an east-lane player
+    //     still has to cross back over the open strip above the island
+    //     (y324-450, full width) to reach it -- the level's one unavoidable
+    //     exposed crossing, which sits directly between the beast's den and
+    //     the exit no matter which lane you took.
+    //
+    // The Cinder Cache sits in a sealed alcove (roofed + walled on three
+    // sides, open only from the south/lane side -- same proven "out-and-
+    // back, no shortcut" nook shape as level 5's, this time on the far east
+    // wall, ~550px off the island and nowhere near the direct route) --
+    // fetching it costs real distance and time and, if the beast is already
+    // in pursuit, real risk of being cornered in a dead-end pocket. Skipping
+    // it costs nothing extra: the lane past the alcove's mouth is untouched
+    // by it, and the level is fully finishable without ever holding a
+    // charge. But the level's one unavoidable exposed crossing (the open
+    // strip above the island, back toward the beast's den, that every route
+    // must eventually make to reach the exit) is exactly the kind of moment
+    // a held charge is for: get caught there mid-cooldown with the beast
+    // closing, and spending the stored charge for an immediate extra ember
+    // is a felt, plausible save -- without ever being the level's mandatory
+    // "correct" use. A final tight S-weave (two baffles) between the exit
+    // gap and the circle gives that last crossing a tight-turn payoff, same
+    // "weave before the goal" motif as earlier levels, at a much smaller
+    // scale. Tuning: keeps level 6's beast speed (150) and level 7's own
+    // longer ember cooldown (3500ms, vs. 1500ms elsewhere) from the first
+    // Cinder Cache draft, since a longer cooldown is what makes both a
+    // normal drop and a spent charge feel consequential; ember lifetime
+    // (4000ms) unchanged.
+    fieldW: 1800,
+    fieldH: 1000,
+    playerStart: { x: 900, y: 930 },
+    beastStart: { x: 700, y: 550 },
+    safeZone: { x: 70, y: 70, r: 28 },
+    beastSpeed: 150,
+    emberCooldownMs: 3500,
+    emberLifetimeMs: 4000,
+    cinderCaches: [{ x: 1663, y: 560 }],
+    obstacles: [
+      // start chamber (y824-1000): small orientation block, clear of the
+      // start (900,930) and the gap above -- same early wall-sliding teach
+      // as levels 5-6, much smaller stage
+      { x: 650, y: 920, w: 150, h: 24 },
+
+      // arena/start boundary -- single gap at the center, x800-1000, the
+      // only way into the arena
+      { x: 0,    y: 800, w: 800,  h: 24 },
+      { x: 1000, y: 800, w: 800,  h: 24 },
+
+      // west lane micro-chokepoint -- close to the beast's den, the direct
+      // route's one piece of texture (not a full weave)
+      { x: 300, y: 500, w: 26, h: 140 },
+
+      // central island -- the arena's one big shape. Splits the open room
+      // into the west (direct, past the beast) and east (long way round)
+      // lanes; open strips above (y324-450) and below (y750-800) the
+      // island let a player cross from one lane to the other anywhere
+      // along the arena, not just at the ends
+      { x: 750, y: 450, w: 300, h: 300 },
+
+      // Cinder Cache alcove -- roofed and walled on three sides, open only
+      // to the south (the lane). Far east wall, well off the island and
+      // the direct route: a real out-and-back, not a way-station
+      { x: 1600, y: 480, w: 150, h: 24 },  // alcove roof
+      { x: 1600, y: 504, w: 26,  h: 120 }, // alcove west wall
+      { x: 1724, y: 504, w: 26,  h: 120 }, // alcove east wall
+
+      // arena/corridor boundary -- single gap at the west, x260-460. Both
+      // lanes funnel back to this one exit, directly across the open strip
+      // above the island from the beast's den
+      { x: 0,   y: 300, w: 260,  h: 24 },
+      { x: 460, y: 300, w: 1340, h: 24 },
+
+      // final approach (y0-300, x0-600): a tight S-weave before the circle
+      { x: 200, y: 0,   w: 26, h: 190 },
+      { x: 400, y: 130, w: 26, h: 170 },
+    ],
+  },
 ];
 
 // ---- state -------------------------------------------------------
@@ -373,6 +488,7 @@ fogCanvas.width = W; fogCanvas.height = H;
 const fogCtx = fogCanvas.getContext("2d");
 
 const emberStatusEl = document.getElementById("ember-status");
+const cacheStatusEl = document.getElementById("cache-status");
 const levelStatusEl = document.getElementById("level-status");
 const overlayMsgEl = document.getElementById("overlay-msg");
 const hudEl = document.getElementById("hud");
@@ -380,11 +496,18 @@ const hudEl = document.getElementById("hud");
 let debugView = false;
 let gameOver = false; // "won" | "lost" | false
 let lastEmberDropAt = -Infinity;
+let lastCachePickupAt = -Infinity;  // drives the "cinder charge ready" HUD message
+let lastChargeSpentAt = -Infinity;  // drives the "cinder charge spent" HUD message
+let hasCinderCharge = false;        // at most one stored charge, held until spent or the level resets
+let spaceWasDown = false;
+const CACHE_PICKUP_MSG_MS = 900;
+const CACHE_SPENT_MSG_MS = 900;
+const CACHE_BURST_MS = 500;
 let elapsedMs = 0;
 
 let levelIndex = 0;
 let level; // current level config, resolved against LEVEL_DEFAULTS
-let player, beast, embers;
+let player, beast, embers, caches, cacheBursts;
 
 function loadLevel(i) {
   levelIndex = i;
@@ -407,7 +530,16 @@ function resetGame() {
     patrolTarget: { x: level.beastStart.x, y: level.beastStart.y + 160 },
   };
   embers = []; // { x, y, droppedAt }
+  // Cinder Caches only exist where a level's data lists them; most levels
+  // have none. Cloned fresh from level data so a restart always restores
+  // any caches collected during the previous attempt.
+  caches = (level.cinderCaches || []).map(c => ({ x: c.x, y: c.y }));
+  cacheBursts = []; // { x, y, at } -- brief pickup-feedback rings, cleared on every reset
   lastEmberDropAt = -Infinity;
+  lastCachePickupAt = -Infinity;
+  lastChargeSpentAt = -Infinity;
+  hasCinderCharge = false; // no carryover between levels or across a restart, per design brief
+  spaceWasDown = false;
   elapsedMs = 0;
   gameOver = false;
   overlayMsgEl.textContent = "";
@@ -484,13 +616,42 @@ function updatePlayer(dtSec) {
     player.y = Math.max(PLAYER_RADIUS, Math.min(level.fieldH - PLAYER_RADIUS, player.y));
   }
 
-  if (keys.has(" ")) tryDropEmber();
+  // Cinder Cache pickup: touching one removes it (it never reappears this
+  // attempt) and, if the player isn't already holding a charge, grants one
+  // stored Cinder Charge -- a single future-use "spend to skip the cooldown"
+  // resource, not an immediate effect. The burst/HUD feedback fires whenever
+  // a cache is touched, even on the (currently unreachable, since level 7
+  // only places one) case where a charge is already held.
+  for (let i = caches.length - 1; i >= 0; i--) {
+    if (dist(player, caches[i]) < PLAYER_RADIUS + CACHE_RADIUS) {
+      cacheBursts.push({ x: caches[i].x, y: caches[i].y, at: elapsedMs });
+      lastCachePickupAt = elapsedMs;
+      caches.splice(i, 1);
+      if (!hasCinderCharge) hasCinderCharge = true;
+    }
+  }
+  cacheBursts = cacheBursts.filter(b => elapsedMs - b.at < CACHE_BURST_MS);
+
+  const spaceIsDown = keys.has(" ");
+  if (spaceIsDown && !spaceWasDown) {
+    tryDropEmber();
+  }
+  spaceWasDown = spaceIsDown;
 }
 
 function tryDropEmber() {
-  if (elapsedMs - lastEmberDropAt < level.emberCooldownMs) return;
-  lastEmberDropAt = elapsedMs;
-  embers.push({ x: player.x, y: player.y, droppedAt: elapsedMs });
+  const cooldownReady = elapsedMs - lastEmberDropAt >= level.emberCooldownMs;
+  if (cooldownReady) {
+    // Normal drop: the stored charge, if any, is left untouched.
+    lastEmberDropAt = elapsedMs;
+    embers.push({ x: player.x, y: player.y, droppedAt: elapsedMs });
+  } else if (hasCinderCharge) {
+    // Spend the stored charge to drop immediately, mid-cooldown.
+    // Do NOT change lastEmberDropAt, do NOT restart, extend, or reset the normal cooldown.
+    hasCinderCharge = false;
+    lastChargeSpentAt = elapsedMs;
+    embers.push({ x: player.x, y: player.y, droppedAt: elapsedMs, fromCharge: true });
+  }
 }
 
 // Beast AI -- deliberately the simplest possible rule set:
@@ -521,7 +682,7 @@ function checkWinLose() {
     overlayMsgEl.style.color = "#8fe38f";
     overlayMsgEl.textContent = levelIndex < LEVELS.length - 1
       ? "YOU REACHED SAFETY — press N for the next level"
-      : "ALL SIX LEVELS CLEAR — press Shift+R to start over";
+      : `ALL ${LEVELS.length} LEVELS CLEAR — press Shift+R to start over`;
   } else if (dist(player, beast) < PLAYER_RADIUS + BEAST_RADIUS) {
     gameOver = "lost";
     overlayMsgEl.style.color = "#e37d7d";
@@ -607,6 +768,30 @@ const EMBER_PAL = {
   f: "#ff7a1e", // outer flame (warm orange)
   c: "#ffe6a0", // hot pale core
   b: "#8f2c12", // cooled base embers
+};
+// Same sprite, one swapped core color -- a tiny, cheap tell for an ember
+// dropped by spending a Cinder Charge, so it's distinguishable at a glance
+// without a new silhouette or animation.
+const EMBER_CHARGE_PAL = Object.assign({}, EMBER_PAL, { c: "#fff6d0" });
+
+// Cinder Cache: a small compact spark cluster, deliberately shaped and
+// colored to avoid reading as either a dropped ember (tall flame tongue,
+// orange/pale-yellow) or the safe zone (large grey stone ring). A wide
+// diamond silhouette with a near-white pulsing core -- a positive pickup,
+// not bait left on the ground.
+const CACHE_SPRITE = [
+  "...k...",
+  "..kck..",
+  ".kcwck.",
+  "kcwwwck",
+  ".kcwck.",
+  "..kck..",
+  "...k...",
+];
+const CACHE_PAL = {
+  k: "#5a2a10", // dark warm outline
+  c: "#ff9a3c", // amber body
+  w: "#fff6d0", // near-white pulsing core
 };
 
 // Brick masonry palette -- deliberately low-contrast (mortar and the two
@@ -694,6 +879,41 @@ function drawWorld() {
   // safe zone (pixel stone circle)
   drawStoneCircle();
 
+  // cinder caches (small pulsing pickup; only present where level data
+  // lists them). The pulse is a legibility aid so it reads as "alive"
+  // against a static dropped ember, not a hitpoint/timer of any kind.
+  for (const c of caches) {
+    const pulse = 0.7 + 0.3 * Math.sin(elapsedMs / 220);
+    const glowR = PX * 7;
+    const glow = ctx.createRadialGradient(c.x, c.y, 0, c.x, c.y, glowR);
+    glow.addColorStop(0, `rgba(255,240,190,${0.55 * pulse})`);
+    glow.addColorStop(1, "rgba(255,240,190,0)");
+    ctx.fillStyle = glow;
+    ctx.beginPath();
+    ctx.arc(c.x, c.y, glowR, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.globalAlpha = pulse;
+    drawSprite(CACHE_SPRITE, CACHE_PAL, c.x, c.y, false);
+    ctx.globalAlpha = 1;
+  }
+
+  // Cinder Cache pickup feedback: a brief expanding, fading glow-pop at the
+  // pickup point. Purely cosmetic and self-clearing (CACHE_BURST_MS) --
+  // fires even if the ember cooldown was already expired, so the pickup
+  // still visibly registers.
+  for (const b of cacheBursts) {
+    const t = (elapsedMs - b.at) / CACHE_BURST_MS; // 0 -> 1
+    if (t >= 1) continue;
+    const r = PX * 4 + t * PX * 14;
+    ctx.globalAlpha = 1 - t;
+    ctx.strokeStyle = "#fff6d0";
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(b.x, b.y, r, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.globalAlpha = 1;
+  }
+
   // embers (blocky flames on the ground, fade after they go cold)
   for (const e of embers) {
     const age = elapsedMs - e.droppedAt;
@@ -711,7 +931,7 @@ function drawWorld() {
     ctx.beginPath();
     ctx.arc(e.x, e.y, glowR, 0, Math.PI * 2);
     ctx.fill();
-    drawSprite(EMBER_SPRITE, EMBER_PAL, e.x, e.y);
+    drawSprite(EMBER_SPRITE, e.fromCharge ? EMBER_CHARGE_PAL : EMBER_PAL, e.x, e.y);
     ctx.globalAlpha = 1;
   }
 
@@ -780,6 +1000,14 @@ function drawDebug() {
     ctx.stroke();
   }
 
+  ctx.strokeStyle = "rgba(255,240,190,0.8)";
+  for (const c of caches) {
+    ctx.beginPath();
+    ctx.arc(c.x, c.y, CACHE_RADIUS, 0, Math.PI * 2);
+    ctx.stroke();
+  }
+  ctx.strokeStyle = "rgba(255,255,255,0.35)";
+
   ctx.beginPath();
   ctx.arc(beast.x, beast.y, BEAST_RADIUS + 4, 0, Math.PI * 2);
   ctx.strokeStyle = "rgba(255,220,0,0.8)";
@@ -828,6 +1056,15 @@ function frame(ts) {
   emberStatusEl.textContent = cooldownLeft > 0
     ? `ember: cooling (${(cooldownLeft / 1000).toFixed(1)}s)`
     : "ember: ready";
+  if (elapsedMs - lastCachePickupAt < CACHE_PICKUP_MSG_MS) {
+    cacheStatusEl.textContent = "cinder charge ready";
+  } else if (elapsedMs - lastChargeSpentAt < CACHE_SPENT_MSG_MS) {
+    cacheStatusEl.textContent = "cinder charge spent";
+  } else if (hasCinderCharge) {
+    cacheStatusEl.textContent = "cinder charge: held";
+  } else {
+    cacheStatusEl.textContent = "";
+  }
 
   requestAnimationFrame(frame);
 }
