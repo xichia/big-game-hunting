@@ -760,92 +760,180 @@
     }
   }
 
-  // Shoreline foam built from the same small dash/dot vocabulary as
-  // drawWaterFlecks/drawWaterGlints, sharing visual DNA to feel like one
-  // shared visual language instead of a rigid borders. Uses irregular
-  // spacing and shapes, keeping average water boundary fixed at boundaryX (150).
-  function drawShoreFoam(boundaryX, yTop, yBottom) {
-    const step = 8;
-    const rowStart = Math.floor(yTop / step);
-    const rowEnd = Math.floor(yBottom / step);
-    const t = performance.now() * 0.0006;
+  // Both side contours use long, deterministic profiles with varied segment
+  // heights. This keeps the pixel-art steps calm without exposing a row grid.
+  const SHORELINE_SEGMENT_HEIGHTS = [
+    10, 6, 14, 8, 4, 12, 6, 10, 16, 4, 8, 12, 6, 14,
+    4, 10, 8, 6, 12, 4, 14, 8, 10, 6, 16, 4, 8, 16
+  ];
+  const SHORELINE_CURVE_OFFSETS = [
+    0, -2, -4, -4, -6, -8, -8, -10, -10, -12, -10, -10, -8, -8,
+    -6, -6, -4, -4, -2, -2, 0, 0, 2, 0, -2, 0, 0, 0
+  ];
+  const SHORELINE_PROFILE = [
+    ...SHORELINE_SEGMENT_HEIGHTS.map((height, index) => ({
+      height,
+      offset: SHORELINE_CURVE_OFFSETS[index]
+    })),
+    ...SHORELINE_SEGMENT_HEIGHTS.map((height, index) => ({
+      height,
+      offset: -SHORELINE_CURVE_OFFSETS[index]
+    }))
+  ];
+  const DUNE_EDGE_PROFILE = [
+    { height: 16, offset: 0 }, { height: 8, offset: -2 }, { height: 6, offset: -4 },
+    { height: 12, offset: -2 }, { height: 4, offset: 0 }, { height: 10, offset: 0 },
+    { height: 14, offset: 4 }, { height: 6, offset: 2 }, { height: 8, offset: 0 },
+    { height: 4, offset: -2 }, { height: 16, offset: 0 }, { height: 10, offset: 0 },
+    { height: 6, offset: 0 }, { height: 12, offset: -2 }, { height: 8, offset: -4 },
+    { height: 4, offset: -2 }, { height: 14, offset: 0 }, { height: 10, offset: 2 },
+    { height: 6, offset: 4 }, { height: 8, offset: 2 }, { height: 12, offset: 0 },
+    { height: 4, offset: -2 }, { height: 10, offset: 0 }, { height: 16, offset: 2 },
+    { height: 6, offset: 0 }, { height: 8, offset: -2 }, { height: 4, offset: 0 },
+    { height: 14, offset: 0 }
+  ];
+  const WATER_SCATTER_LAYERS = [
+    { cellWidth: 44, cellHeight: 52, density: 0.24, seed: 11, color: '#eaf6f7', alpha: 0.46 },
+    { cellWidth: 62, cellHeight: 68, density: 0.12, seed: 29, color: '#ffffff', alpha: 0.58 }
+  ];
 
-    for (let row = rowStart; row <= rowEnd; row++) {
-      const hash = Math.abs(Math.sin(row * 12.9898 + 0.123)) % 1;
-      if (hash < 0.65) continue; // skip most rows to create natural, irregular spacing
+  function getProfileHeight(profile) {
+    return profile.reduce((total, segment) => total + segment.height, 0);
+  }
 
-      const variant = Math.floor(hash * 100) % 4;
-      const xOffset = Math.floor(hash * 73) % 7 - 3; // range -3 to +3
-      const y = row * step;
+  function coordinateHash(x, y, seed) {
+    const value = Math.sin(x * 127.1 + y * 311.7 + seed * 74.7) * 43758.5453;
+    return value - Math.floor(value);
+  }
 
-      const pulse = Math.sin(t * 2.2 + row * 0.9);
-      ctx.fillStyle = pulse > 0.3 ? '#ffffff' : '#eaf6f7';
-
-      const baseCol = boundaryX + xOffset;
-
-      if (variant === 0) {
-        // Horizontal dash matching water flecks
-        ctx.fillRect(baseCol - 2, y, 4, 2);
-      } else if (variant === 1) {
-        // Single dot matching water glints
-        ctx.fillRect(baseCol - 1, y, 2, 2);
-      } else if (variant === 2) {
-        // Small two-part cluster
-        ctx.fillRect(baseCol - 3, y, 3, 2);
-        ctx.fillRect(baseCol + 1, y + 2, 2, 2);
-      } else {
-        // Displaced dash
-        ctx.fillRect(baseCol - 1, y, 3, 2);
-        ctx.fillRect(baseCol - 4, y + 1, 2, 1);
+  function forEachProfileSegment(profile, yTop, yBottom, drawSegment) {
+    const profileHeight = getProfileHeight(profile);
+    const firstCycle = Math.floor(yTop / profileHeight) * profileHeight;
+    for (let cycleY = firstCycle; cycleY <= yBottom; cycleY += profileHeight) {
+      let y = cycleY;
+      for (let segment of profile) {
+        if (y + segment.height > yTop && y < yBottom) {
+          drawSegment(y, segment.height, segment.offset);
+        }
+        y += segment.height;
       }
     }
   }
 
-  function drawWaterFlecks(yTop, yBottom) {
-    const step = 48;
-    const startRow = Math.floor(yTop / step);
-    const endRow = Math.floor(yBottom / step);
-    const t = performance.now() * 0.001;
-    
-    ctx.save();
-    ctx.fillStyle = '#ffffff';
-    for (let r = startRow; r <= endRow; r++) {
-      const y = r * step + 12;
-      const startX = 40 + ((r * 17) % 70);
-      const cycleDuration = 3.0;
-      const rowTime = t + (r * 0.7);
-      const cycle = rowTime % cycleDuration;
-      
-      if (cycle < 1.5) {
-        const progress = cycle / 1.5;
-        const drift = progress * 16;
-        ctx.globalAlpha = Math.sin(progress * Math.PI) * 0.6;
-        ctx.fillRect(Math.floor(startX + drift), y, 4, 2);
+  // Fill each profiled side as one continuous path. Stacking separate
+  // rectangles can reveal hairline seams when the fractional camera moves.
+  function drawProfiledSide(profile, boundaryX, yTop, yBottom, side, color) {
+    const segments = [];
+    forEachProfileSegment(profile, yTop, yBottom, (y, height, offset) => {
+      segments.push({ y, height, offset });
+    });
+    if (segments.length === 0) return;
+
+    const outerX = side === 'left' ? 0 : canvas.width;
+    const first = segments[0];
+    const last = segments[segments.length - 1];
+    const bottom = last.y + last.height;
+
+    ctx.fillStyle = color;
+    ctx.beginPath();
+    ctx.moveTo(outerX, first.y);
+    ctx.lineTo(boundaryX + first.offset, first.y);
+    for (let i = 0; i < segments.length; i++) {
+      const segment = segments[i];
+      const segmentBottom = segment.y + segment.height;
+      ctx.lineTo(boundaryX + segment.offset, segmentBottom);
+      if (i + 1 < segments.length) {
+        ctx.lineTo(boundaryX + segments[i + 1].offset, segmentBottom);
       }
     }
+    ctx.lineTo(outerX, bottom);
+    ctx.closePath();
+    ctx.fill();
+  }
+
+  // The shoreline profile's weighted offset is zero, keeping X=150 as its
+  // exact average without assembling the water from horizontal strips.
+  function drawOcean(boundaryX, yTop, yBottom) {
+    drawProfiledSide(SHORELINE_PROFILE, boundaryX, yTop, yBottom, 'left', '#2b96b7');
+  }
+
+  function drawDunes(boundaryX, yTop, yBottom) {
+    drawProfiledSide(DUNE_EDGE_PROFILE, boundaryX, yTop, yBottom, 'right', '#d9bb82');
+  }
+
+  function drawWaterMark(x, y, variant) {
+    if (variant === 0) {
+      ctx.fillRect(x, y, 2, 2);
+    } else if (variant === 1) {
+      ctx.fillRect(x, y, 4, 2);
+    } else if (variant === 2) {
+      ctx.fillRect(x, y, 2, 4);
+      ctx.fillRect(x + 2, y + 2, 2, 2);
+    } else if (variant === 3) {
+      ctx.fillRect(x, y, 6, 2);
+    } else {
+      ctx.fillRect(x, y, 4, 2);
+      ctx.fillRect(x + 2, y + 2, 2, 2);
+    }
+  }
+
+  // Foam placement is hashed per irregular contour segment, so chunks stay
+  // stable in world space without sharing a repeated Y row or cycle pattern.
+  function drawShoreFoam(boundaryX, yTop, yBottom) {
+    const t = performance.now() * 0.0006;
+    ctx.save();
+    forEachProfileSegment(SHORELINE_PROFILE, yTop - 4, yBottom + 4, (y, height, offset) => {
+      const segmentKey = Math.floor(y / 2);
+      if (coordinateHash(segmentKey, height, 41) > 0.44) return;
+
+      const verticalSlots = Math.max(1, Math.floor((height - 2) / 2));
+      const foamY = y + 2 * Math.floor(coordinateHash(segmentKey, height, 43) * verticalSlots);
+      const xJitter = (Math.floor(coordinateHash(segmentKey, offset, 47) * 3) - 1) * 2;
+      const variant = Math.floor(coordinateHash(segmentKey, height, 53) * 5);
+      const pulse = 0.68 + Math.sin(t * 2.2 + coordinateHash(segmentKey, offset, 59) * Math.PI * 2) * 0.18;
+
+      ctx.globalAlpha = pulse;
+      ctx.fillStyle = variant % 2 === 0 ? '#ffffff' : '#eaf6f7';
+      drawWaterMark(boundaryX + offset + xJitter - 2, foamY, variant);
+    });
     ctx.restore();
   }
 
-  function drawWaterGlints(yTop, yBottom) {
-    const step = 72;
-    const startRow = Math.floor(yTop / step);
-    const endRow = Math.floor(yBottom / step);
-    const t = performance.now() * 0.0008;
-    
+  // Sparse, independently jittered 2D cells replace the old one-mark-per-row
+  // fleck and glint loops. Two unequal grids prevent shared horizontal rails.
+  function drawWaterDetails(yTop, yBottom) {
+    const t = performance.now() * 0.001;
     ctx.save();
-    ctx.fillStyle = '#ffffff';
-    for (let r = startRow; r <= endRow; r++) {
-      const y = r * step + 24;
-      const startX = 30 + ((r * 23) % 80);
-      const rowTime = t + (r * 1.3);
-      const cycle = rowTime % 5.0;
-      
-      if (cycle < 0.4) {
-        const progress = cycle / 0.4;
-        ctx.globalAlpha = Math.sin(progress * Math.PI) * 0.8;
-        ctx.fillRect(Math.floor(startX), y, 2, 2);
+
+    for (let layer of WATER_SCATTER_LAYERS) {
+      const rowStart = Math.floor((yTop - layer.cellHeight) / layer.cellHeight);
+      const rowEnd = Math.floor((yBottom + layer.cellHeight) / layer.cellHeight);
+      const colEnd = Math.ceil(138 / layer.cellWidth);
+
+      for (let row = rowStart; row <= rowEnd; row++) {
+        for (let col = 0; col < colEnd; col++) {
+          const presence = coordinateHash(col, row, layer.seed);
+          if (presence > layer.density) continue;
+
+          const cellX = col * layer.cellWidth;
+          if (cellX + 6 > 136) continue;
+
+          const xMin = cellX + 4;
+          const xMax = Math.min(130, cellX + layer.cellWidth - 8);
+          const xSlots = Math.max(1, Math.floor((xMax - xMin) / 2) + 1);
+          const ySlots = Math.max(1, Math.floor((layer.cellHeight - 10) / 2));
+          const x = xMin + 2 * Math.floor(coordinateHash(col, row, layer.seed + 2) * xSlots);
+          const y = row * layer.cellHeight + 4 + 2 * Math.floor(coordinateHash(col, row, layer.seed + 4) * ySlots);
+          const variant = Math.floor(coordinateHash(col, row, layer.seed + 6) * 5);
+          const phase = coordinateHash(col, row, layer.seed + 8) * Math.PI * 2;
+
+          ctx.fillStyle = layer.color;
+          ctx.globalAlpha = layer.alpha * (0.72 + Math.sin(t * 0.7 + phase) * 0.18);
+          drawWaterMark(x, y, variant);
+        }
       }
     }
+
     ctx.restore();
   }
 
@@ -872,11 +960,8 @@
     return '#' + (0x1000000 + r * 0x10000 + g * 0x100 + b).toString(16).slice(1);
   }
 
-  // Shell silhouettes: fan/scallop, spiral/conch, and clam-arc. Purely a
+  // Shell silhouettes: fluted scallop, spiral/conch, and oval clam. Purely a
   // cosmetic pick (shell.shapeType) - no rarity or gameplay difference.
-  // Kept to one plain fill, one shadow shape, and a single outline stroke
-  // each - no ridge-line loops or stacked curves - so shells read as clean
-  // silhouettes rather than decorative illustration.
   function drawShellShape(shell) {
     const s = shell.size;
     const color = shell.color;
@@ -891,44 +976,59 @@
     ctx.translate(shell.x, shell.y);
 
     if (shell.shapeType === 0) {
-      // Fan / scallop shell - a plain fan with three shallow, blocky top
-      // steps so the silhouette reads as a scallop rather than a pennant.
+      // Scallop: broad stepped crown, rounded fan sides, tapered hinge.
       ctx.beginPath();
-      ctx.moveTo(0, s);
-      ctx.lineTo(-s, -s * 0.6);
-      ctx.lineTo(-s * 0.75, -s * 0.6);
-      ctx.lineTo(-s * 0.75, -s * 0.8);
-      ctx.lineTo(-s * 0.35, -s * 0.8);
-      ctx.lineTo(-s * 0.35, -s * 0.6);
-      ctx.lineTo(-s * 0.2, -s * 0.6);
-      ctx.lineTo(-s * 0.2, -s * 0.85);
-      ctx.lineTo(s * 0.2, -s * 0.85);
-      ctx.lineTo(s * 0.2, -s * 0.6);
-      ctx.lineTo(s * 0.35, -s * 0.6);
-      ctx.lineTo(s * 0.35, -s * 0.8);
-      ctx.lineTo(s * 0.75, -s * 0.8);
-      ctx.lineTo(s * 0.75, -s * 0.6);
-      ctx.lineTo(s, -s * 0.6);
+      ctx.moveTo(0, s * 0.8);
+      ctx.lineTo(-s * 0.45, s * 0.45);
+      ctx.lineTo(-s * 0.75, s * 0.2);
+      ctx.lineTo(-s, -s * 0.2);
+      ctx.lineTo(-s, -s * 0.5);
+      ctx.lineTo(-s * 0.75, -s * 0.5);
+      ctx.lineTo(-s * 0.75, -s * 0.72);
+      ctx.lineTo(-s * 0.35, -s * 0.72);
+      ctx.lineTo(-s * 0.35, -s * 0.9);
+      ctx.lineTo(s * 0.35, -s * 0.9);
+      ctx.lineTo(s * 0.35, -s * 0.72);
+      ctx.lineTo(s * 0.75, -s * 0.72);
+      ctx.lineTo(s * 0.75, -s * 0.5);
+      ctx.lineTo(s, -s * 0.5);
+      ctx.lineTo(s, -s * 0.2);
+      ctx.lineTo(s * 0.75, s * 0.2);
+      ctx.lineTo(s * 0.45, s * 0.45);
       ctx.closePath();
       ctx.fillStyle = color;
       ctx.fill();
       ctx.lineWidth = OUTLINE_LW;
       ctx.strokeStyle = outline;
       ctx.stroke();
-      // One shadow wedge at the hinge - the only interior detail.
+      // Three short ribs radiate from the hinge without filling the sprite.
+      ctx.strokeStyle = dark;
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(0, s * 0.42);
+      ctx.lineTo(0, -s * 0.52);
+      ctx.moveTo(-s * 0.14, s * 0.34);
+      ctx.lineTo(-s * 0.5, -s * 0.4);
+      ctx.moveTo(s * 0.14, s * 0.34);
+      ctx.lineTo(s * 0.5, -s * 0.4);
+      ctx.stroke();
       ctx.fillStyle = dark;
-      ctx.beginPath();
-      ctx.moveTo(0, s);
-      ctx.lineTo(-s * 0.3, s * 0.2);
-      ctx.lineTo(s * 0.3, s * 0.2);
-      ctx.closePath();
-      ctx.fill();
+      ctx.fillRect(-2, Math.floor(s * 0.52), 4, 2);
     } else if (shell.shapeType === 1) {
-      // Spiral / conch shell - a plain teardrop with one coil arc.
+      // Conch: an asymmetric stepped body, small mouth, and one clear curl.
       ctx.beginPath();
-      ctx.moveTo(0, -s);
-      ctx.quadraticCurveTo(s * 0.6, 0, 0, s);
-      ctx.quadraticCurveTo(-s * 0.6, 0, 0, -s);
+      ctx.moveTo(-s * 0.85, -s * 0.25);
+      ctx.lineTo(-s * 0.6, -s * 0.65);
+      ctx.lineTo(-s * 0.15, -s * 0.85);
+      ctx.lineTo(s * 0.4, -s * 0.7);
+      ctx.lineTo(s * 0.7, -s * 0.4);
+      ctx.lineTo(s * 0.75, 0);
+      ctx.lineTo(s, s * 0.2);
+      ctx.lineTo(s * 0.55, s * 0.35);
+      ctx.lineTo(s * 0.35, s * 0.7);
+      ctx.lineTo(-s * 0.2, s * 0.8);
+      ctx.lineTo(-s * 0.7, s * 0.5);
+      ctx.lineTo(-s * 0.9, s * 0.1);
       ctx.closePath();
       ctx.fillStyle = color;
       ctx.fill();
@@ -936,25 +1036,35 @@
       ctx.strokeStyle = outline;
       ctx.stroke();
       ctx.strokeStyle = dark;
-      ctx.lineWidth = OUTLINE_LW;
+      ctx.lineWidth = 2;
       ctx.beginPath();
-      ctx.arc(0, 0, s * 0.4, 0.3, Math.PI * 1.7);
+      ctx.arc(-s * 0.1, -s * 0.02, s * 0.32, 0.2, Math.PI * 1.75);
       ctx.stroke();
+      ctx.fillStyle = dark;
+      ctx.fillRect(Math.floor(s * 0.5), Math.floor(s * 0.08), 2, 2);
     } else {
-      // Clam shell - a plain domed arc, flat hinge base, one growth ring.
+      // Clam: a squat stepped oval with a tiny hinge and ridge pixels.
       ctx.beginPath();
-      ctx.arc(0, s * 0.3, s * 0.8, Math.PI, Math.PI * 2);
+      ctx.moveTo(-s, -s * 0.15);
+      ctx.lineTo(-s * 0.75, -s * 0.55);
+      ctx.lineTo(-s * 0.25, -s * 0.75);
+      ctx.lineTo(s * 0.35, -s * 0.75);
+      ctx.lineTo(s * 0.8, -s * 0.5);
+      ctx.lineTo(s, -s * 0.1);
+      ctx.lineTo(s * 0.85, s * 0.4);
+      ctx.lineTo(s * 0.35, s * 0.6);
+      ctx.lineTo(-s * 0.45, s * 0.6);
+      ctx.lineTo(-s * 0.85, s * 0.35);
       ctx.closePath();
       ctx.fillStyle = color;
       ctx.fill();
       ctx.lineWidth = OUTLINE_LW;
       ctx.strokeStyle = outline;
       ctx.stroke();
-      ctx.strokeStyle = dark;
-      ctx.lineWidth = OUTLINE_LW;
-      ctx.beginPath();
-      ctx.arc(0, s * 0.3, s * 0.5, Math.PI, Math.PI * 2);
-      ctx.stroke();
+      ctx.fillStyle = dark;
+      ctx.fillRect(-2, Math.floor(s * 0.25), 4, 2);
+      ctx.fillRect(-Math.floor(s * 0.45), 0, 2, 2);
+      ctx.fillRect(Math.floor(s * 0.45) - 2, 0, 2, 2);
     }
 
     ctx.restore();
@@ -980,23 +1090,20 @@
     ctx.fillRect(0, viewTop, canvas.width, 800);
     drawSpeckleField(150, 720, viewTop, viewBottom, 64, SAND_SPECKLES, '#c9a873');
 
-    // Draw Ocean (water) on left - a plain flat fill; the shoreline foam
-    // below is the only "wave" the water shows.
-    ctx.fillStyle = '#2b96b7';
-    ctx.fillRect(0, viewTop, 150, 800);
+    // Draw Ocean (water) on left - a plain flat fill with a small, stable
+    // stepped edge. This changes only the shoreline silhouette, not gameplay.
+    drawOcean(150, viewTop, viewBottom);
 
-    // Procedural water details
-    drawWaterFlecks(viewTop, viewBottom);
-    drawWaterGlints(viewTop, viewBottom);
+    // Sparse water details use irregular 2D scatter rather than Y rows.
+    drawWaterDetails(viewTop, viewBottom);
 
     // Water shoreline foam - blocky, stepped edge; the only textured hint
     // the beach carries for white water, per the plain-surfaces direction.
     drawShoreFoam(150, viewTop, viewBottom);
 
-    // Draw dunes & dry grass on the right side - flat, with a sparse
-    // speckle hint suggesting dune texture, nothing busier.
-    ctx.fillStyle = '#d9bb82'; // dune sand
-    ctx.fillRect(720, viewTop, 80, 800);
+    // Draw dunes & dry grass on the right side with a separate restrained
+    // stepped contour, keeping the center sand visually open and playable.
+    drawDunes(720, viewTop, viewBottom);
     drawSpeckleField(720, 800, viewTop, viewBottom, 56, DUNE_SPECKLES, '#bfa06c');
 
     // Draw Dune tufts & plants
@@ -1158,21 +1265,48 @@
       drawGrassTuft(20, -2, Math.round(ip.x));
     }
     else if (ip.type === 'tidepool') {
-      // Water circle
+      // Chunky irregular rim and offset inner water make this read as a
+      // shallow beach puddle rather than a circular marker.
+      ctx.fillStyle = '#247e9e';
+      ctx.beginPath();
+      ctx.moveTo(-20, -2);
+      ctx.lineTo(-16, -8);
+      ctx.lineTo(-8, -10);
+      ctx.lineTo(0, -8);
+      ctx.lineTo(8, -10);
+      ctx.lineTo(16, -6);
+      ctx.lineTo(20, -2);
+      ctx.lineTo(18, 4);
+      ctx.lineTo(12, 8);
+      ctx.lineTo(4, 8);
+      ctx.lineTo(-4, 10);
+      ctx.lineTo(-12, 8);
+      ctx.lineTo(-18, 4);
+      ctx.closePath();
+      ctx.fill();
+
       ctx.fillStyle = '#2e9dbf';
       ctx.beginPath();
-      ctx.arc(0, 0, 18, 0, Math.PI * 2);
+      ctx.moveTo(-16, -2);
+      ctx.lineTo(-12, -6);
+      ctx.lineTo(-4, -8);
+      ctx.lineTo(2, -6);
+      ctx.lineTo(8, -8);
+      ctx.lineTo(14, -4);
+      ctx.lineTo(16, 0);
+      ctx.lineTo(12, 4);
+      ctx.lineTo(6, 6);
+      ctx.lineTo(-2, 6);
+      ctx.lineTo(-8, 8);
+      ctx.lineTo(-14, 4);
+      ctx.closePath();
       ctx.fill();
-      
-      // Inner crescent (shimmer)
+
+      // Two broken highlight pixels imply shallow reflected water without a
+      // circular inner ring.
       ctx.fillStyle = '#5ec3df';
-      ctx.beginPath();
-      ctx.arc(-2, -2, 12, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.fillStyle = '#2e9dbf';
-      ctx.beginPath();
-      ctx.arc(0, 0, 13, 0, Math.PI * 2);
-      ctx.fill();
+      ctx.fillRect(-10, -4, 6, 2);
+      ctx.fillRect(-4, -6, 4, 2);
 
       // Blinking highlight pixel (pure white)
       const shimmerT = performance.now() * 0.002;
