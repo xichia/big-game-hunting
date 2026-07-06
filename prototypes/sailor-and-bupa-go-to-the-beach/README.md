@@ -21,27 +21,35 @@ open prototypes/sailor-and-bupa-go-to-the-beach/index.html
 ## Gameplay Mechanics
 
 * **Bupa's Rhythm**: Bupa decides his own path up the beach, trotting from one interest point to another.
-* **Readable Tells**:
-  - Bupa cycles through three postures during every pause:
-    - Sniffing during the first 40%
-    - Sitting/Staring during the next 40%
-    - Standing Alert/Tail Wagging during the final 20%
+* **Readable Tells & Custom Performances**:
+  - Bupa cycles through three postures during every pause (first 40% sniffing, next 40% custom investigation performance, final 20% alert and tail-wagging).
+  - During the middle 40% investigation stage, Bupa has a custom performance per interest point type:
+    - **Tidepool**: Bupa crouches and bats/paws at the water.
+    - **Driftwood**: Bupa stretches forward and scratches/rubs claws against the log.
+    - **Rock Pile**: Bupa sits and bobs his head (nosing/sniffing).
+    - **Default (Grass/Tuft)**: Bupa crouches low and sniffs/peeks.
   - Interest-point type controls the total pause duration:
-    - Rock / Shell Cluster: short pause, about 2–4s, so the cycle is quick
-    - Driftwood / Grass Tuft: medium pause, about 4–7s, so the cycle is moderate
-    - Tidepool: long pause, about 8–11s, so the cycle is slow
-* **Proximity/Check-Back**: If Sailor moves too far from Bupa while he is trotting, he stops, sits, looks back, and meows until Sailor returns close to him.
+    - Rock: short pause (2–4s)
+    - Driftwood: medium pause (4.5–6.5s)
+    - Tidepool: long pause (8–11s)
+* **Proximity, Check-Back, & Affection**:
+  - If Sailor moves too far from Bupa while he is trotting, he stops, sits, looks back, and meows until Sailor returns close to him.
+  - **Reunion Mrrp**: When Sailor returns to reassure Bupa after a check-back meow, Bupa flashes a happy meow chip saying "mrrp!".
+  - **Idle Affection**: If Sailor stands close (<40px) and still near Bupa for more than 2 seconds, Bupa enters an affectionate state—curling his tail down and slow-blinking his eyes closed.
+  - **Stationary Idles**: While stationary, Bupa has subtle quantized ear flick and tail sway animations.
 * **Scarcity**: The beach scrolls up as Bupa progresses. Any shells left behind are forfeited/missed.
 
 ## Visual Pass
 
 A visual-simplification pass was applied on top of the earlier visual-cohesion pass (no mechanics changed), moving the look toward *Trail of Embers*' plainer, chunkier pixel-art sensibility, beach-themed:
-* Sand and water are now mostly flat, plain fills with only a sparse pixel-speckle hint of grain - no dense speckle fields, tile-checker shading, or banded waves. The shoreline keeps a single blocky, stepped foam edge as the only "wave" texture.
-* Sailor is a simple back-facing sprite; her pigtails - two big, plain hair bunches held clear of her head - are her main defining feature. Gold hair ties and other decorative hair detail were removed. Her blue outfit is plainer (no collar trim or highlight band).
-* Bupa stays mostly gray with a small hint of white (paws/chest); his meow/worry cue is now a plain chip with no gold border.
-* Shells (fan/scallop, spiral, clam-arc) are simplified to one flat fill, one shadow shape, and a single outline stroke each - no ridge-line loops or stacked curves - so they read as clean silhouettes rather than illustration.
-* Dune vegetation (grass tufts, the larger dune plant) is simplified to two tones and fewer blades/leaf clusters, so it supports the scene without competing with it.
-* All game-world drawing still routes through the shared half-resolution pixel buffer, upscaled with nearest-neighbor scaling, so characters, terrain, and objects share one consistent, chunky pixel scale.
+* Sand and water are mostly flat, plain fills with only a sparse pixel-speckle hint of grain. The shoreline keeps a blocky, stepped main foam edge as the primary "wave" texture, supplemented by a secondary, sparser foam line, drifting foam flecks, and rare glints.
+* Dune vegetation (grass tufts, dune plants) features a time-based, row-phased quantized 2px sway animation.
+* Tidepools feature a lighter blue inner crescent shimmer and a blinking white highlight pixel.
+* Sailor is a simple back-facing sprite with warm brown pigtails, a plain blue outfit, and pigtail sway/walk animations.
+* Bupa stays mostly gray with a small hint of white (paws/chest).
+* Shells are simplified to one flat fill, one shadow shape, and a single outline stroke. Occasional uncollected shells emit a brief 3px cross glint/sparkle.
+* Ambient decorative crabs (red/orange, clawed) rarely emerge from the sand near rocks or the waterline, scuttle horizontally, and burrow back down, leaving a small sand pile.
+* All game-world drawing routes through the shared half-resolution pixel buffer, upscaled with nearest-neighbor scaling.
 
 ## Out-of-Scope List
 
@@ -49,9 +57,9 @@ The following features are explicitly out-of-scope for this prototype:
 * Rescue/trouble mechanics beyond the check-back sit (stuck, startled, lured).
 * Moving tide or waterline (the water on the left is decorative).
 * Wave contact or pushback.
-* Hazards, crabs, gulls, or health/hearts/death.
+* Hazards, gulls, hazard/mechanic crabs, or health/hearts/death. (Note: ambient critters are decorative and non-interactive only).
 * Countdown timers.
 * Shell rarities.
-* Audio (meows are visual-only).
+* Audio (meows and mrrps are visual-only).
 * Multiple levels or menus.
 * Save state.
