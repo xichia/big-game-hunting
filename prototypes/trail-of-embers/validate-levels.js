@@ -58,13 +58,15 @@ function check(cond, msg) {
 // as soon as it gets within `targetR + PLAYER_RADIUS` of `target`. Shared by
 // the safe-zone reachability check and the Cinder Cache reachability check
 // below -- same clearance logic, different destination.
-function bfsReachable(level, target, targetR) {
+function bfsReachable(level, target, targetR, gateClosed = false) {
   const step = 5;
   const cols = Math.floor(level.fieldW / step), rows = Math.floor(level.fieldH / step);
+  const gateBlocks = (level.gate && gateClosed) ? [level.gate] : [];
+  const obstaclesToUse = level.obstacles.concat(gateBlocks);
   const blocked = (x, y) =>
     x < PLAYER_RADIUS || y < PLAYER_RADIUS ||
     x > level.fieldW - PLAYER_RADIUS || y > level.fieldH - PLAYER_RADIUS ||
-    level.obstacles.some(o => circleRectCollide(x, y, PLAYER_RADIUS, o));
+    obstaclesToUse.some(o => circleRectCollide(x, y, PLAYER_RADIUS, o));
   const key = (cx, cy) => cy * cols + cx;
   const start = [Math.round(level.playerStart.x / step), Math.round(level.playerStart.y / step)];
   const seen = new Uint8Array(cols * rows);
@@ -74,6 +76,41 @@ function bfsReachable(level, target, targetR) {
     const [cx, cy] = queue.shift();
     const x = cx * step, y = cy * step;
     if (Math.hypot(x - target.x, y - target.y) < targetR + PLAYER_RADIUS) return true;
+    for (const [dx, dy] of [[1,0],[-1,0],[0,1],[0,-1]]) {
+      const nx = cx + dx, ny = cy + dy;
+      if (nx < 0 || ny < 0 || nx >= cols || ny >= rows) continue;
+      if (seen[key(nx, ny)]) continue;
+      seen[key(nx, ny)] = 1;
+      if (!blocked(nx * step, ny * step)) queue.push([nx, ny]);
+    }
+  }
+  return false;
+}
+
+// BFS to verify if the player can reach/overlap a specific target rectangle
+function bfsReachableToRect(level, rect, gateClosed = true) {
+  const step = 5;
+  const cols = Math.floor(level.fieldW / step), rows = Math.floor(level.fieldH / step);
+  const gateBlocks = (level.gate && gateClosed) ? [level.gate] : [];
+  const obstaclesToUse = level.obstacles.concat(gateBlocks);
+  const blocked = (x, y) =>
+    x < PLAYER_RADIUS || y < PLAYER_RADIUS ||
+    x > level.fieldW - PLAYER_RADIUS || y > level.fieldH - PLAYER_RADIUS ||
+    obstaclesToUse.some(o => circleRectCollide(x, y, PLAYER_RADIUS, o));
+  const key = (cx, cy) => cy * cols + cx;
+  const start = [Math.round(level.playerStart.x / step), Math.round(level.playerStart.y / step)];
+  const seen = new Uint8Array(cols * rows);
+  const queue = [start];
+  seen[key(...start)] = 1;
+  while (queue.length) {
+    const [cx, cy] = queue.shift();
+    const x = cx * step, y = cy * step;
+    
+    // Check if player circle overlaps the target rectangle
+    const nearestX = Math.max(rect.x, Math.min(x, rect.x + rect.w));
+    const nearestY = Math.max(rect.y, Math.min(y, rect.y + rect.h));
+    if (Math.hypot(x - nearestX, y - nearestY) < PLAYER_RADIUS) return true;
+    
     for (const [dx, dy] of [[1,0],[-1,0],[0,1],[0,-1]]) {
       const nx = cx + dx, ny = cy + dy;
       if (nx < 0 || ny < 0 || nx >= cols || ny >= rows) continue;
@@ -97,8 +134,33 @@ LEVELS.forEach((raw, i) => {
   check(!level.obstacles.some(o => circleRectCollide(level.safeZone.x, level.safeZone.y, level.safeZone.r, o)),
     "safe zone clear of obstacles");
   check(level.beastSpeed < 175, `beast (${level.beastSpeed}) slower than player (175)`);
-  check(bfsReachable(level, level.safeZone, level.safeZone.r),
-    "safe zone reachable from player start (BFS, player-radius clearance)");
+  
+  if (level.gate) {
+    check(inBounds(level.gate) && inBounds({ x: level.gate.x + level.gate.w, y: level.gate.y + level.gate.h }),
+      "gate in bounds");
+    check(level.triggerZone && inBounds(level.triggerZone) && inBounds({ x: level.triggerZone.x + level.triggerZone.w, y: level.triggerZone.y + level.triggerZone.h }),
+      "trigger zone in bounds");
+    
+    const gateOverlapsObstacles = level.obstacles.some(o => {
+      return !(level.gate.x + level.gate.w <= o.x ||
+               o.x + o.w <= level.gate.x ||
+               level.gate.y + level.gate.h <= o.y ||
+               o.y + o.h <= level.gate.y);
+    });
+    check(!gateOverlapsObstacles, "gate not overlapping obstacles");
+    
+    const tzReachable = bfsReachableToRect(level, level.triggerZone);
+    check(tzReachable, "trigger zone reachable by player (BFS, player-radius clearance)");
+    
+    const closedReachable = bfsReachable(level, level.safeZone, level.safeZone.r, true);
+    check(!closedReachable, "gate closed: safe zone not reachable");
+    
+    const openReachable = bfsReachable(level, level.safeZone, level.safeZone.r, false);
+    check(openReachable, "gate open: safe zone reachable");
+  } else {
+    check(bfsReachable(level, level.safeZone, level.safeZone.r),
+      "safe zone reachable from player start (BFS, player-radius clearance)");
+  }
 
   (level.cinderCaches || []).forEach((c, ci) => {
     check(inBounds(c), `cinder cache ${ci + 1} in bounds`);

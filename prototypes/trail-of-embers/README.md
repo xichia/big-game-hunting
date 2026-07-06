@@ -2,7 +2,7 @@
 
 ARTIFACT TYPE: Probe (playable prototype)
 AUTHORITY: PROBE
-STATUS: Draft — Audio/Proximity Cue pass (added Web Audio API synthesized proximity rumble, ember tick, win/loss stingers, and mute control) untested, human-gated
+STATUS: Draft — Level 8 Beast-Gate pass (added beast-activated gate, trigger zone, and Level 8) untested, human-gated
 SOURCE-OF-TRUTH FILES TOUCHED: none
 
 This is the playable build for the probe defined in
@@ -48,19 +48,18 @@ Gamepad / Controller Support (Standard mapping):
 - **Start / Menu Button (Button 9)** — restart current level
 
 Prototype testing shortcut:
-- Press number keys 1–7 to jump directly to a level.
+- Press number keys 1–8 to jump directly to a level.
 
 ## Level / challenge structure
 
-Seven fixed, hand-placed levels (three from Challenge Pass 1, one larger
+Eight fixed, hand-placed levels (three from Challenge Pass 1, one larger
 maze from Scale Pass 1, one larger still from the Fullscreen/Larger Maze
-Pass, one bigger and tighter still from the bounded maze pass, and one from
-the Cinder Cache pass that introduces the probe's first positive
-collectible). The HUD shows the current level. Winning a level offers **N**
+Pass, one bigger and tighter still from the bounded maze pass, one from
+the Cinder Cache pass, and one from the beast-gate probe pass). The HUD shows the current level. Winning a level offers **N**
 to continue; losing restarts the same level with **R**. The core loop is
-identical in all seven — only simple per-level data varies (start
+identical in all eight — only simple per-level data varies (start
 positions, safe zone, obstacle rectangles, playfield size, per-level beast
-speed and ember tuning, and — only on level 7 — Cinder Cache placement).
+speed and ember tuning, Cinder Cache placement, and — only on level 8 — gate and trigger zone configuration).
 
 1. **First Light** — the exact layout and tuning from the successful first
    playtest, unchanged. Slightly easy on purpose: teaches ember-as-bait.
@@ -208,6 +207,21 @@ speed and ember tuning, and — only on level 7 — Cinder Cache placement).
      Cache draft's longer ember cooldown (3500ms vs. 1500ms everywhere
      else), since a longer cooldown is what makes both a normal drop and a
      spent charge feel consequential; ember lifetime (4000ms) is unchanged.
+8. **The Gatekeeper's Keep** (beast-gate probe pass) — same 1800x1000 scale family as levels 6–7. It introduces the first beast-activated gate. Deliberate design beats:
+   - **Main Chokepoint Gate** — The gate sits at a central doorway (`y=250`), completely blocking passage to the safe zone when closed. It does not block the beast, who can move through it freely.
+   - **Co-located Trigger Zone** — A subtle rectangular rune floor sigil (`y=180` to `320`) marks the doorway. The gate remains open only while the beast is inside this zone.
+   - **Tense Luring Sequence** — The player must detour to collect a Cinder Cache, arrive at the closed gate, drop a bait ember to draw the beast into the trigger zone, slip through as the gate opens, and then use their stored Cinder Charge to survive the final escape beat to the safe zone.
+   - **Lit Causal Indicator** — To ensure the relationship between the beast's position and the gate state is clear, the beast is dynamically lit/visible when it enters the trigger zone and opens the gate.
+   - **Tuning** — Reuses level 7's 3500ms cooldown and 4000ms ember lifetime to make the Cinder Charge near-essential for the escape beat.
+
+## What changed in the Beast-Gate Probe Pass
+
+- **Beast-Activated Gate & Trigger Zone** — Adds a new gating mechanic where the gate is only open when the beast is positioned within the co-located trigger zone.
+- **Portcullis Visuals & Sigil marking** — Gate has custom portcullis barred visuals (horizontal bars, retracted when open), and the trigger zone is rendered as a subtle rectangular floor rune/sigil.
+- **G Debug Overlay Extension** — Pressing `G` now overlays the trigger zone boundaries, gate boundaries, and explicit gate status (OPEN/CLOSED).
+- **Two-State Level Validation** — The level validator (`validate-levels.js`) now checks gated levels to ensure the safe zone is unreachable while closed, but reachable when open, and verifies trigger zone reachability and bounds.
+- **Lit Beast Indicator** — Fog rendering punches a light hole around the beast when it triggers the gate to make the causality clear.
+- **Nothing else changed** — Embers, cooldowns, Cinder Charge, beast AI, controller behavior, audio behavior, and levels 1–7 remain entirely unchanged.
 
 ## What changed in the Audio/Proximity Cue Pass
 
@@ -521,9 +535,9 @@ Run the new larger level (5, "The Deep Maze") at least 3 times.
 
 ## What's implemented
 
-- Seven fixed single-screen dark levels (not procedural), each a handful of
+- Eight fixed single-screen dark levels (not procedural), each a handful of
   hardcoded obstacle rectangles. Levels 1–3 run at 900×560, level 4 at
-  1280×760, level 5 at 1600×900, levels 6–7 at 1800×1000 (the canvas
+  1280×760, level 5 at 1600×900, levels 6–8 at 1800×1000 (the canvas
   resizes per level — no scrolling camera; a CSS `max-width`/`max-height`
   cap shrinks the display to fit smaller windows without changing
   field-pixel coordinates).
@@ -551,6 +565,8 @@ Run the new larger level (5, "The Deep Maze") at least 3 times.
   The charge, its pickup/spend message timers, and the cache itself all
   reset with the rest of level state on **R**/**Shift+R** — no carryover
   between levels.
+- **Beast-Activated Gate** (level 8 only): a horizontal gate that blocks player movement when closed but does not block the beast. It is open only while the beast is inside the trigger zone. Snapped to the rendering grid, it draws as a custom barred portcullis when closed, and retracts to the sides when open.
+- **Trigger Zone** (level 8 only): a rectangular floor rune/sigil co-located with the gate doorway that opens the gate when the beast occupies it, accompanied by a dynamic light punch to keep the beast visible.
 - Player movement (8-directional, arrow keys/WASD) with simple
   circle-vs-rectangle collision against obstacles.
 - Constant torch radius around the player — this is the player's baseline

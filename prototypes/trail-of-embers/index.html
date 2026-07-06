@@ -479,7 +479,42 @@ const LEVELS = [
       { x: 400, y: 130, w: 26, h: 170 },
     ],
   },
+  {
+    name: "The Gatekeeper's Keep",
+    // Level 8 beast-gate probe: a level using the gate/triggerZone mechanics.
+    fieldW: 1800,
+    fieldH: 1000,
+    playerStart: { x: 70, y: 930 },
+    beastStart: { x: 900, y: 350 },
+    safeZone: { x: 1730, y: 70, r: 28 },
+    beastSpeed: 150,
+    emberCooldownMs: 3500,
+    emberLifetimeMs: 4000,
+    cinderCaches: [{ x: 1600, y: 870 }],
+    gate: { x: 1400, y: 250, w: 120, h: 24 },
+    triggerZone: { x: 1400, y: 180, w: 120, h: 140 },
+    obstacles: [
+      // Guide walls
+      { x: 0,    y: 750, w: 1200, h: 24 },
+      { x: 1350, y: 750, w: 450,  h: 24 },
+      
+      { x: 300,  y: 500, w: 1500, h: 24 },
+      
+      { x: 0,    y: 250, w: 1400, h: 24 },
+      { x: 1520, y: 250, w: 280,  h: 24 },
+      
+      // Final S-weave approach to the safe zone
+      { x: 1650, y: 0,   w: 24,   h: 150 }
+    ],
+  },
 ];
+
+function isGateOpen() {
+  if (!level || !level.gate || !level.triggerZone) return false;
+  const tz = level.triggerZone;
+  return beast.x >= tz.x && beast.x <= tz.x + tz.w &&
+         beast.y >= tz.y && beast.y <= tz.y + tz.h;
+}
 
 // ---- state -------------------------------------------------------
 const canvas = document.getElementById("game");
@@ -776,8 +811,10 @@ function updatePlayer(dtSec, gp) {
 
     // Resolve each axis independently against obstacles so sliding along a
     // wall works instead of fully blocking diagonal movement.
-    const blockedX = level.obstacles.some(o => circleRectCollide(nx, player.y, PLAYER_RADIUS, o));
-    const blockedY = level.obstacles.some(o => circleRectCollide(player.x, ny, PLAYER_RADIUS, o));
+    const gateBlocks = (level.gate && !isGateOpen()) ? [level.gate] : [];
+    const obstaclesAndGate = level.obstacles.concat(gateBlocks);
+    const blockedX = obstaclesAndGate.some(o => circleRectCollide(nx, player.y, PLAYER_RADIUS, o));
+    const blockedY = obstaclesAndGate.some(o => circleRectCollide(player.x, ny, PLAYER_RADIUS, o));
     if (!blockedX) player.x = nx;
     if (!blockedY) player.y = ny;
     player.x = Math.max(PLAYER_RADIUS, Math.min(level.fieldW - PLAYER_RADIUS, player.x));
@@ -1044,12 +1081,68 @@ function drawStoneCircle() {
   }
 }
 
+function drawGate(g, isOpen) {
+  ctx.save();
+  if (isOpen) {
+    // Open state: retracted/gap. Draw small retracted bars on the sides.
+    ctx.fillStyle = "#5a5a5a";
+    ctx.fillRect(g.x, g.y, 15, g.h);
+    ctx.fillRect(g.x + g.w - 15, g.y, 15, g.h);
+  } else {
+    // Closed state: barred/portcullis-like pixel art.
+    ctx.fillStyle = "#1e1e1e"; // border/frame
+    ctx.fillRect(g.x, g.y, g.w, g.h);
+    
+    ctx.fillStyle = "#8a8a8a"; // iron bars
+    for (let bx = g.x + 8; bx < g.x + g.w - 4; bx += 12) {
+      ctx.fillRect(bx, g.y + 2, 4, g.h - 4);
+    }
+    // Draw horizontal cross-bars
+    ctx.fillStyle = "#5a5a5a";
+    ctx.fillRect(g.x, g.y + 4, g.w, 3);
+    ctx.fillRect(g.x, g.y + g.h - 7, g.w, 3);
+  }
+  ctx.restore();
+}
+
 function drawWorld() {
   ctx.fillStyle = "#0e1a10";
   ctx.fillRect(0, 0, level.fieldW, level.fieldH);
 
+  // trigger zone (subtle floor rune/sigil)
+  if (level.triggerZone) {
+    const tz = level.triggerZone;
+    ctx.save();
+    // Subtle rectangular floor rune/sigil floor coloring
+    ctx.fillStyle = isGateOpen() ? "rgba(100, 200, 150, 0.15)" : "rgba(180, 80, 50, 0.08)";
+    ctx.fillRect(tz.x, tz.y, tz.w, tz.h);
+    
+    // Draw subtle border
+    ctx.strokeStyle = isGateOpen() ? "#64c896" : "#b45032";
+    ctx.lineWidth = 2;
+    ctx.setLineDash([2, 4]);
+    ctx.strokeRect(tz.x, tz.y, tz.w, tz.h);
+    
+    // Draw rune markings (lines connecting corners or crossing inside)
+    ctx.strokeStyle = isGateOpen() ? "rgba(100, 200, 150, 0.3)" : "rgba(180, 80, 50, 0.18)";
+    ctx.lineWidth = 1;
+    ctx.setLineDash([]);
+    ctx.beginPath();
+    ctx.moveTo(tz.x + 10, tz.y + 10);
+    ctx.lineTo(tz.x + tz.w - 10, tz.y + tz.h - 10);
+    ctx.moveTo(tz.x + tz.w - 10, tz.y + 10);
+    ctx.lineTo(tz.x + 10, tz.y + tz.h - 10);
+    ctx.stroke();
+    ctx.restore();
+  }
+
   // walls as brick masonry
   for (const o of level.obstacles) drawBricks(o);
+
+  // gate
+  if (level.gate) {
+    drawGate(level.gate, isGateOpen());
+  }
 
   // safe zone (pixel stone circle)
   drawStoneCircle();
@@ -1146,6 +1239,10 @@ function drawFog() {
   }
 
   punchHole(player.x, player.y, TORCH_RADIUS);
+  if (level.gate && isGateOpen()) {
+    // Punch a hole at the beast's position to light it up when it triggers the gate.
+    punchHole(beast.x, beast.y, TORCH_RADIUS);
+  }
   for (const e of embers) {
     const age = elapsedMs - e.droppedAt;
     const t = Math.max(0, 1 - age / level.emberLifetimeMs);
@@ -1182,6 +1279,25 @@ function drawDebug() {
     ctx.stroke();
   }
   ctx.strokeStyle = "rgba(255,255,255,0.35)";
+
+  // gate debug bounds
+  if (level.gate) {
+    ctx.strokeStyle = isGateOpen() ? "rgba(100, 255, 150, 0.7)" : "rgba(255, 100, 100, 0.7)";
+    ctx.lineWidth = 2;
+    ctx.strokeRect(level.gate.x, level.gate.y, level.gate.w, level.gate.h);
+    ctx.fillStyle = isGateOpen() ? "#64ff96" : "#ff6464";
+    ctx.fillText(`gate: ${isGateOpen() ? "OPEN" : "CLOSED"}`, level.gate.x, level.gate.y - 8);
+  }
+
+  // trigger zone debug bounds
+  if (level.triggerZone) {
+    ctx.strokeStyle = "rgba(255, 165, 0, 0.6)";
+    ctx.setLineDash([2, 4]);
+    ctx.strokeRect(level.triggerZone.x, level.triggerZone.y, level.triggerZone.w, level.triggerZone.h);
+    ctx.setLineDash([]);
+    ctx.fillStyle = "#ffa500";
+    ctx.fillText("trigger zone", level.triggerZone.x + 4, level.triggerZone.y + 16);
+  }
 
   ctx.beginPath();
   ctx.arc(beast.x, beast.y, BEAST_RADIUS + 4, 0, Math.PI * 2);
