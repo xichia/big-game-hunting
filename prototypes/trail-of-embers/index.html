@@ -298,7 +298,7 @@ function loadLevel(i) {
 }
 
 function resetGame() {
-  player = { x: level.playerStart.x, y: level.playerStart.y };
+  player = { x: level.playerStart.x, y: level.playerStart.y, facing: 1 }; // facing is cosmetic only
   beast = {
     x: level.beastStart.x, y: level.beastStart.y,
     state: "idle",             // idle | patrol | chase-ember | chase-torch
@@ -361,6 +361,12 @@ function updatePlayer(dtSec) {
   if (keys.has("arrowup") || keys.has("w")) dy -= 1;
   if (keys.has("arrowdown") || keys.has("s")) dy += 1;
 
+  // cosmetic facing bias: remember the last horizontal input direction so
+  // the sprite can face the way the player is moving. Does not affect
+  // movement, speed, or collision -- draw only.
+  if (dx < 0) player.facing = -1;
+  else if (dx > 0) player.facing = 1;
+
   if (dx !== 0 || dy !== 0) {
     const len = Math.hypot(dx, dy);
     const nx = player.x + (dx / len) * PLAYER_SPEED * dtSec;
@@ -422,47 +428,204 @@ function checkWinLose() {
 }
 
 // ---- draw -------------------------------------------------------
+// CANVAS-DRAWN BLOCKY PIXEL-ART EXPERIMENT PASS. This is a rendering/style
+// test only: every figure below is hand-drawn from a chunky grid of
+// fillRect blocks (no external assets) and walls are painted as brick
+// masonry. It is a blocky, canvas-drawn pixel-art LOOK -- NOT a guaranteed
+// device-pixel-perfect render. The canvas is CSS-scaled to fit the viewport
+// (see the #game rule above), so on the larger levels the browser resamples
+// these blocks and they are not 1:1 with physical screen pixels.
+//
+// Provenance: Ian requested this pixel-art direction ("walls like bricks,
+// characters as simple figures") AFTER the previous silhouette/glow visual
+// pass was rejected. This pass intentionally diverges from that
+// silhouette/glow research artifact; it is an experiment, not a ratified
+// art direction.
+//
+// None of the collision-relevant numbers change -- sprites are centered on
+// the exact same x/y and sized to sit around the unchanged hit radii, so
+// PLAYER_RADIUS / BEAST_RADIUS / safeZone.r still govern all gameplay.
+
+// One shared cosmetic lattice for the whole scene. PX is the size, in
+// CANVAS pixels (a block/art unit -- NOT device pixels), of a single art
+// "pixel". Bricks, mortar, safe-zone stones and embers are all whole
+// multiples of PX so sprites, walls and the goal read as one blocky system.
+const PX = 3;                 // canvas pixels per art block
+const BRICK_W = PX * 10;      // 30 -- coarse bricks stay legible when downscaled
+const BRICK_H = PX * 5;       // 15
+const BRICK_M = PX;           // 3 -- mortar gap (thicker than before to survive CSS scaling)
+const STONE_CELL = PX * 2;    // 6 -- safe-zone stones share the lattice
+
+// Player: a small upright torch-bearer -- warm, compact, clearly a person.
+const PLAYER_SPRITE = [
+  "..fff..",
+  ".offfo.",
+  ".obbbo.",
+  "obbbbbe",
+  ".obbbo.",
+  ".obbbo.",
+  "..o.o..",
+  "..k.k..",
+];
+const PLAYER_PAL = {
+  o: "#3a2416", // dark warm outline
+  f: "#e8d27a", // face/hood -- keeps the original player hue
+  b: "#c98a3a", // cloak body (warm amber)
+  k: "#5a3d22", // legs
+  e: "#ff9a3c", // ember carried at the hand
+};
+
+// Beast: a low, wide four-legged hound -- reads as predator, not person.
+const BEAST_SPRITE = [
+  "......r..",
+  "..rrrrrrr",
+  ".rrrrrrry",
+  "rrrrrrrrr",
+  ".rrrrrrr.",
+  ".d.d.d.d.",
+];
+const BEAST_PAL = {
+  r: "#b23a3a", // body -- keeps the original beast hue
+  d: "#5a1a1a", // legs / dark underside
+  y: "#ffd24a", // single bright eye (hunting your fire)
+};
+
+// Ember: a small blocky flame left burning on the ground -- an upright
+// tongue of fire with a hot pale core over cooled base embers, so it reads
+// as dropped fire/bait, not a collectible pickup.
+const EMBER_SPRITE = [
+  "..f..",
+  ".fcf.",
+  ".fcf.",
+  "fcccf",
+  "fcccf",
+  ".fbf.",
+];
+const EMBER_PAL = {
+  f: "#ff7a1e", // outer flame (warm orange)
+  c: "#ffe6a0", // hot pale core
+  b: "#8f2c12", // cooled base embers
+};
+
+// Brick masonry palette -- deliberately low-contrast (mortar and the two
+// brick tones sit close in luminance) so the texture stays calm and does
+// not shimmer when the big levels are CSS-downscaled.
+const BRICK_MORTAR = "#2b2419";
+const BRICK_A = "#4c4133";
+const BRICK_B = "#463c2f";
+
+// Paint a pixel-grid sprite centered on (cx, cy), each art pixel PX canvas
+// pixels square. Origin snaps to whole canvas pixels so the blocks stay
+// crisp. `flip` mirrors the sprite horizontally -- a cosmetic-only facing
+// change; it never touches position, hit radius, or any gameplay state.
+function drawSprite(grid, palette, cx, cy, flip) {
+  const rows = grid.length, cols = grid[0].length;
+  const ox = Math.round(cx - (cols * PX) / 2);
+  const oy = Math.round(cy - (rows * PX) / 2);
+  for (let r = 0; r < rows; r++) {
+    for (let c = 0; c < cols; c++) {
+      const sc = flip ? cols - 1 - c : c; // read mirrored column when facing left
+      const color = palette[grid[r][sc]];
+      if (!color) continue;
+      ctx.fillStyle = color;
+      ctx.fillRect(ox + c * PX, oy + r * PX, PX, PX);
+    }
+  }
+}
+
+// Fill an obstacle rectangle with running-bond brick masonry, clipped so
+// the wall's collision edges stay exactly where the rect defines them.
+function drawBricks(o) {
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(o.x, o.y, o.w, o.h);
+  ctx.clip();
+  ctx.fillStyle = BRICK_MORTAR;
+  ctx.fillRect(o.x, o.y, o.w, o.h);
+  // Running-bond courses on the shared PX lattice. Only the course (row)
+  // alternates tone -- calmer and lower-detail than a per-brick
+  // checkerboard, which turns into busy noise once the field is scaled down.
+  let row = 0;
+  for (let y = o.y; y < o.y + o.h; y += BRICK_H + BRICK_M) {
+    const offset = (row % 2) ? -(BRICK_W / 2 + BRICK_M / 2) : 0; // half-brick stagger
+    ctx.fillStyle = (row % 2) ? BRICK_A : BRICK_B;
+    for (let x = o.x + offset; x < o.x + o.w; x += BRICK_W + BRICK_M) {
+      ctx.fillRect(x + BRICK_M, y, BRICK_W - BRICK_M, BRICK_H);
+    }
+    row++;
+  }
+  ctx.restore();
+}
+
+// Safe zone rendered as a pixelated stone ring -- same center/radius, so
+// it reads (and collides) identically to the old flat circle.
+function drawStoneCircle() {
+  const { x, y, r } = level.safeZone;
+  const cell = STONE_CELL;
+  // Scan a grid snapped to the shared PX lattice over the circle's bounding
+  // box and keep each cell whose center falls inside the radius. This is
+  // robust for ANY radius (no dependence on r being an even multiple of the
+  // cell size) and keeps the ring aligned to the brick/sprite grid.
+  const x0 = Math.floor((x - r) / cell) * cell;
+  const y0 = Math.floor((y - r) / cell) * cell;
+  for (let sy = y0; sy <= y + r; sy += cell) {
+    for (let sx = x0; sx <= x + r; sx += cell) {
+      const d = Math.hypot(sx + cell / 2 - x, sy + cell / 2 - y);
+      if (d > r) continue;
+      // checker keyed on integer lattice indices -- never depends on r parity
+      const gi = Math.round(sx / cell) + Math.round(sy / cell);
+      ctx.fillStyle = d > r - cell * 1.5
+        ? "#cfcfae"                            // lighter rim -- reads as the goal
+        : ((gi & 1) ? "#8a8a78" : "#787866");  // stone body
+      ctx.fillRect(sx, sy, cell, cell);
+    }
+  }
+}
+
 function drawWorld() {
   ctx.fillStyle = "#0e1a10";
   ctx.fillRect(0, 0, level.fieldW, level.fieldH);
 
-  ctx.fillStyle = "#3a2f22";
-  for (const o of level.obstacles) ctx.fillRect(o.x, o.y, o.w, o.h);
+  // walls as brick masonry
+  for (const o of level.obstacles) drawBricks(o);
 
-  // safe zone (stone circle)
-  ctx.beginPath();
-  ctx.arc(level.safeZone.x, level.safeZone.y, level.safeZone.r, 0, Math.PI * 2);
-  ctx.fillStyle = "#8a8a78";
-  ctx.fill();
-  ctx.strokeStyle = "#cfcfae";
-  ctx.lineWidth = 2;
-  ctx.stroke();
+  // safe zone (pixel stone circle)
+  drawStoneCircle();
 
-  // embers (glow marks on the ground, fade after they stop being hot)
+  // embers (blocky flames on the ground, fade after they go cold)
   for (const e of embers) {
     const age = elapsedMs - e.droppedAt;
     const alpha = Math.max(0, 1 - Math.max(0, age - level.emberLifetimeMs) / EMBER_FADE_MS);
     if (alpha <= 0) continue;
-    const grad = ctx.createRadialGradient(e.x, e.y, 0, e.x, e.y, 10);
-    grad.addColorStop(0, `rgba(255,140,40,${alpha})`);
-    grad.addColorStop(1, `rgba(255,140,40,0)`);
-    ctx.fillStyle = grad;
+    ctx.globalAlpha = alpha;
+    // subtle cosmetic halo so a dropped ember reads as fire/bait, not a
+    // pickup pip. Purely visual and much smaller than the real ember light
+    // radius -- the actual light hole lives in drawFog and is untouched.
+    const glowR = PX * 8;
+    const glow = ctx.createRadialGradient(e.x, e.y, 0, e.x, e.y, glowR);
+    glow.addColorStop(0, "rgba(255,150,60,0.5)");
+    glow.addColorStop(1, "rgba(255,150,60,0)");
+    ctx.fillStyle = glow;
     ctx.beginPath();
-    ctx.arc(e.x, e.y, 10, 0, Math.PI * 2);
+    ctx.arc(e.x, e.y, glowR, 0, Math.PI * 2);
     ctx.fill();
+    drawSprite(EMBER_SPRITE, EMBER_PAL, e.x, e.y);
+    ctx.globalAlpha = 1;
   }
 
-  // beast
-  ctx.beginPath();
-  ctx.arc(beast.x, beast.y, BEAST_RADIUS, 0, Math.PI * 2);
-  ctx.fillStyle = "#b23a3a";
-  ctx.fill();
+  // beast (low four-legged pixel figure) -- cosmetically oriented toward
+  // whatever it is currently making for. This just re-reads the same target
+  // the AI already chose this frame (read-only); it changes no movement.
+  let bt;
+  const hotEmbers = embers.filter(e => elapsedMs - e.droppedAt < level.emberLifetimeMs);
+  if (hotEmbers.length > 0) bt = hotEmbers[hotEmbers.length - 1];
+  else if (beast.state === "idle") bt = beast.patrolTarget;
+  else bt = player;
+  drawSprite(BEAST_SPRITE, BEAST_PAL, beast.x, beast.y, bt.x < beast.x);
 
-  // player
-  ctx.beginPath();
-  ctx.arc(player.x, player.y, PLAYER_RADIUS, 0, Math.PI * 2);
-  ctx.fillStyle = "#e8d27a";
-  ctx.fill();
+  // player (upright pixel torch-bearer) -- biased toward last movement
+  // direction (player.facing), a cosmetic flip only.
+  drawSprite(PLAYER_SPRITE, PLAYER_PAL, player.x, player.y, player.facing < 0);
 }
 
 // Punch light holes into an opaque fog layer -- this is the entire
