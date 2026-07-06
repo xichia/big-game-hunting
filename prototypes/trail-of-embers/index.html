@@ -500,6 +500,9 @@ let lastCachePickupAt = -Infinity;  // drives the "cinder charge ready" HUD mess
 let lastChargeSpentAt = -Infinity;  // drives the "cinder charge spent" HUD message
 let hasCinderCharge = false;        // at most one stored charge, held until spent or the level resets
 let spaceWasDown = false;
+let gpButton0WasDown = false;
+let gpButton9WasDown = false;
+let emberDroppedThisFrame = false;
 const CACHE_PICKUP_MSG_MS = 900;
 const CACHE_SPENT_MSG_MS = 900;
 const CACHE_BURST_MS = 500;
@@ -539,7 +542,6 @@ function resetGame() {
   lastCachePickupAt = -Infinity;
   lastChargeSpentAt = -Infinity;
   hasCinderCharge = false; // no carryover between levels or across a restart, per design brief
-  spaceWasDown = false;
   elapsedMs = 0;
   gameOver = false;
   overlayMsgEl.textContent = "";
@@ -588,12 +590,27 @@ function moveToward(entity, target, speed, dtSec) {
 }
 
 // ---- update -------------------------------------------------------
-function updatePlayer(dtSec) {
+function updatePlayer(dtSec, gp) {
   let dx = 0, dy = 0;
   if (keys.has("arrowleft") || keys.has("a")) dx -= 1;
   if (keys.has("arrowright") || keys.has("d")) dx += 1;
   if (keys.has("arrowup") || keys.has("w")) dy -= 1;
   if (keys.has("arrowdown") || keys.has("s")) dy += 1;
+
+  if (gp) {
+    if (gp.axes && gp.axes.length >= 2) {
+      const lx = gp.axes[0];
+      const ly = gp.axes[1];
+      if (Math.abs(lx) > 0.3) dx += lx;
+      if (Math.abs(ly) > 0.3) dy += ly;
+    }
+    if (gp.buttons && gp.buttons.length > 15) {
+      if (gp.buttons[12] && gp.buttons[12].pressed) dy -= 1;
+      if (gp.buttons[13] && gp.buttons[13].pressed) dy += 1;
+      if (gp.buttons[14] && gp.buttons[14].pressed) dx -= 1;
+      if (gp.buttons[15] && gp.buttons[15].pressed) dx += 1;
+    }
+  }
 
   // cosmetic facing bias: remember the last horizontal input direction so
   // the sprite can face the way the player is moving. Does not affect
@@ -640,17 +657,20 @@ function updatePlayer(dtSec) {
 }
 
 function tryDropEmber() {
+  if (emberDroppedThisFrame) return;
   const cooldownReady = elapsedMs - lastEmberDropAt >= level.emberCooldownMs;
   if (cooldownReady) {
     // Normal drop: the stored charge, if any, is left untouched.
     lastEmberDropAt = elapsedMs;
     embers.push({ x: player.x, y: player.y, droppedAt: elapsedMs });
+    emberDroppedThisFrame = true;
   } else if (hasCinderCharge) {
     // Spend the stored charge to drop immediately, mid-cooldown.
     // Do NOT change lastEmberDropAt, do NOT restart, extend, or reset the normal cooldown.
     hasCinderCharge = false;
     lastChargeSpentAt = elapsedMs;
     embers.push({ x: player.x, y: player.y, droppedAt: elapsedMs, fromCharge: true });
+    emberDroppedThisFrame = true;
   }
 }
 
@@ -1035,15 +1055,53 @@ function drawDebug() {
   ctx.restore();
 }
 
+function updateGamepadInput(gp) {
+  if (gp && gp.buttons) {
+    // Check restart button (Button 9)
+    if (gp.buttons.length > 9 && gp.buttons[9]) {
+      const button9Down = gp.buttons[9].pressed;
+      if (button9Down && !gpButton9WasDown) {
+        resetGame();
+      }
+      gpButton9WasDown = button9Down;
+    }
+
+    // Check ember button (Button 0)
+    if (gp.buttons.length > 0 && gp.buttons[0]) {
+      const button0Down = gp.buttons[0].pressed;
+      if (button0Down && !gpButton0WasDown && !gameOver) {
+        tryDropEmber();
+      }
+      gpButton0WasDown = button0Down;
+    }
+  } else {
+    gpButton0WasDown = false;
+    gpButton9WasDown = false;
+  }
+}
+
 // ---- main loop -------------------------------------------------------
 let lastTs = performance.now();
 function frame(ts) {
   const dtSec = Math.min(0.05, (ts - lastTs) / 1000);
   lastTs = ts;
 
+  emberDroppedThisFrame = false;
+
+  const gamepads = navigator.getGamepads ? navigator.getGamepads() : [];
+  let gp = null;
+  for (let i = 0; i < gamepads.length; i++) {
+    if (gamepads[i]) {
+      gp = gamepads[i];
+      break;
+    }
+  }
+
+  updateGamepadInput(gp);
+
   if (!gameOver) {
     elapsedMs += dtSec * 1000;
-    updatePlayer(dtSec);
+    updatePlayer(dtSec, gp);
     updateBeast(dtSec);
     checkWinLose();
   }

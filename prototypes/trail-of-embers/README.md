@@ -41,6 +41,11 @@ open prototypes/trail-of-embers/index.html
 - **G** — toggle debug view (shows torch/ember radii and the beast's current AI state + target line)
 - **Esc / quit** — not implemented; just close the browser tab (there is no launch menu to exit from)
 
+Gamepad / Controller Support (Standard mapping):
+- **Left Stick / D-Pad** — move
+- **A / Cross Button (Button 0)** — drop an ember / spend Cinder Charge (edge-triggered; must release and press again to drop multiple)
+- **Start / Menu Button (Button 9)** — restart current level
+
 Prototype testing shortcut:
 - Press number keys 1–7 to jump directly to a level.
 
