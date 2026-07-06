@@ -747,30 +747,26 @@
     }
   }
 
-  // Blocky, stepped foam edge along the shoreline (in place of a smooth
-  // sine-wave curve) so the coastline reads as pixel art, not a vector path.
+  // Restrained, blocky, broken foam marks along the fixed shoreline boundary
+  // (boundaryX never moves) - built from the same small dash/dot vocabulary
+  // as drawWaterFlecks/drawWaterGlints instead of a thick continuous band,
+  // so the waterline reads as one more of the water's white bits rather
+  // than a separate border. Gaps come from a fixed per-row pattern (not
+  // re-rolled per frame), so the break-up reads as broken foam, not flicker.
   function drawShoreFoam(boundaryX, yTop, yBottom) {
-    const step = 16;
+    const step = 14;
     const rowStart = Math.floor(yTop / step);
     const rowEnd = Math.floor(yBottom / step);
     const t = performance.now() * 0.0006;
-    ctx.fillStyle = '#eaf6f7';
-    for (let row = rowStart; row <= rowEnd; row++) {
-      const wobble = Math.round(Math.sin(row * 0.6 + t) * 2) * 4;
-      ctx.fillRect(boundaryX - 6 + wobble, row * step, 12, step - 4);
-    }
-    ctx.fillStyle = '#ffffff';
-    for (let row = rowStart; row <= rowEnd; row += 2) {
-      const wobble = Math.round(Math.sin(row * 0.6 + t) * 2) * 4;
-      ctx.fillRect(boundaryX - 3 + wobble, row * step, 4, 3);
-    }
 
-    // Second, sparser foam line a few pixels into the water that drifts on its own slower phase
-    const t2 = performance.now() * 0.0003;
-    ctx.fillStyle = '#eaf6f7';
-    for (let row = rowStart; row <= rowEnd; row += 3) {
-      const wobble2 = Math.round(Math.sin(row * 0.4 + t2) * 1.5) * 4;
-      ctx.fillRect(boundaryX - 22 + wobble2, row * step + 4, 8, 3);
+    for (let row = rowStart; row <= rowEnd; row++) {
+      const cell = Math.abs(Math.sin(row * 12.9898)) % 1;
+      if (cell < 0.32) continue; // skip roughly a third of rows -> broken edge
+
+      const inset = cell > 0.74 ? 5 : 0; // a minority of chunks sit a touch further into the water
+      const pulse = Math.sin(t * 2.2 + row * 0.9);
+      ctx.fillStyle = pulse > 0.1 ? '#ffffff' : '#eaf6f7';
+      ctx.fillRect(boundaryX - 3 - inset, row * step + 2, 5, 3);
     }
   }
 
@@ -949,13 +945,13 @@
 
     // 1. Draw sand beach background - flat surfaces with only a sparse
     // pixel-speckle hint of grain, no checker shading or banded texture.
-    ctx.fillStyle = '#e8d9ae';
+    ctx.fillStyle = '#f0d29c';
     ctx.fillRect(0, viewTop, canvas.width, 800);
-    drawSpeckleField(150, 720, viewTop, viewBottom, 64, SAND_SPECKLES, '#d3bd8c');
+    drawSpeckleField(150, 720, viewTop, viewBottom, 64, SAND_SPECKLES, '#c9a873');
 
     // Draw Ocean (water) on left - a plain flat fill; the shoreline foam
     // below is the only "wave" the water shows.
-    ctx.fillStyle = '#5b9db3';
+    ctx.fillStyle = '#3c8aa3';
     ctx.fillRect(0, viewTop, 150, 800);
 
     // Procedural water details
@@ -968,9 +964,9 @@
 
     // Draw dunes & dry grass on the right side - flat, with a sparse
     // speckle hint suggesting dune texture, nothing busier.
-    ctx.fillStyle = '#d4c090'; // dune sand
+    ctx.fillStyle = '#d9bb82'; // dune sand
     ctx.fillRect(720, viewTop, 80, 800);
-    drawSpeckleField(720, 800, viewTop, viewBottom, 56, DUNE_SPECKLES, '#c2ac7c');
+    drawSpeckleField(720, 800, viewTop, viewBottom, 56, DUNE_SPECKLES, '#bfa06c');
 
     // Draw Dune tufts & plants
     for (let y = Math.floor(viewTop / 120) * 120 - 120; y < viewBottom; y += 120) {
@@ -1018,7 +1014,7 @@
     }
 
     // 5. Draw Sailor (young 5yo girl, back-facing, blue outfit, warm brown pigtails)
-    drawGroundShadow(sailor.x, sailor.y + 10, 10, 4);
+    drawGroundShadow(sailor.x, sailor.y + 10 * SAILOR_DRAW_SCALE, 10 * SAILOR_DRAW_SCALE, 4 * SAILOR_DRAW_SCALE);
     drawSailor();
 
     // 6. Draw Bupa (gray cat, small hint of white)
@@ -1039,8 +1035,8 @@
   // Two tones only (base + shadow) - simple silhouettes that support the
   // scene without competing with it.
   const GRASS_PALETTES = [
-    { base: '#7f9a5c', shadow: '#5f7a45' },
-    { base: '#8aa564', shadow: '#688048' }
+    { base: '#89b364', shadow: '#5c7a3f' },
+    { base: '#93b96c', shadow: '#628a42' }
   ];
 
   function drawGrassTuft(x, y, variant) {
@@ -1073,7 +1069,7 @@
   // Larger dune plant used sparingly among the grass tufts for variety -
   // one stem, two leaf clusters, two tones.
   function drawDunePlant(x, y, row) {
-    ctx.fillStyle = '#5f7a45';
+    ctx.fillStyle = '#5c7a3f';
     ctx.fillRect(x - 6, y + 12, 14, 3);
 
     // Calculate sway
@@ -1088,7 +1084,7 @@
     ctx.fillRect(x - 1, y + 5, 2, 7); // bottom stem
     ctx.fillRect(x - 1 + swayOffset, y - 2, 2, 7); // top stem
 
-    ctx.fillStyle = '#7f9a5c';
+    ctx.fillStyle = '#89b364';
     ctx.fillRect(x - 7 + swayOffset, y - 10, 6, 6);
     ctx.fillRect(x + 2 + swayOffset, y - 14, 6, 6);
   }
@@ -1126,17 +1122,17 @@
     }
     else if (ip.type === 'tidepool') {
       // Water circle
-      ctx.fillStyle = '#4da2bf';
+      ctx.fillStyle = '#3f93b3';
       ctx.beginPath();
       ctx.arc(0, 0, 18, 0, Math.PI * 2);
       ctx.fill();
       
       // Inner crescent (shimmer)
-      ctx.fillStyle = '#78c1d6';
+      ctx.fillStyle = '#6cb9d1';
       ctx.beginPath();
       ctx.arc(-2, -2, 12, 0, Math.PI * 2);
       ctx.fill();
-      ctx.fillStyle = '#4da2bf';
+      ctx.fillStyle = '#3f93b3';
       ctx.beginPath();
       ctx.arc(0, 0, 13, 0, Math.PI * 2);
       ctx.fill();
@@ -1160,6 +1156,11 @@
     ctx.restore();
   }
 
+  // Sprite-only shrink applied inside drawSailor(); does not touch
+  // sailor.width/height (unused for movement/collision), CONFIG, or any
+  // physics/collection radius.
+  const SAILOR_DRAW_SCALE = 0.84;
+
   function drawSailor() {
     ctx.save();
     ctx.translate(sailor.x, sailor.y);
@@ -1168,6 +1169,7 @@
     if (sailor.facingLeft) {
       ctx.scale(-1, 1);
     }
+    ctx.scale(SAILOR_DRAW_SCALE, SAILOR_DRAW_SCALE);
 
     const hair = '#7a4a2a';       // warm medium brown
     const hairShadow = '#5e3a20';
@@ -1680,7 +1682,7 @@
     }
     
     if (yOffset > 0) {
-      ctx.fillStyle = '#d3bd8c';
+      ctx.fillStyle = '#c9a873';
       ctx.fillRect(-5, 2, 10, 2);
     }
 
