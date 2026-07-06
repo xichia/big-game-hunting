@@ -35,12 +35,13 @@ open prototypes/sailor-and-bupa-go-to-the-beach/index.html
 
 ## Visual Pass
 
-A visual-cohesion pass was applied on top of the first playable (no mechanics changed):
-* Sailor is now clearly back-facing (no face/eyes drawn) with large, prominent warm-brown pigtails.
-* Shells render as recognizable fan/scallop, spiral, and clam-arc silhouettes instead of plain dots, purely as cosmetic variety (still one shell type, no rarity).
-* Sand and water now use pixel-pattern texture (speckles, dithering, tile-tone variation, banded waves, a blocky foam edge) instead of flat fills.
-* Dune vegetation (grass tufts, a larger dune plant) is more layered and detailed.
-* All game-world drawing routes through a shared half-resolution pixel buffer, upscaled with nearest-neighbor scaling, so characters, terrain, and objects share one consistent pixel scale.
+A visual-simplification pass was applied on top of the earlier visual-cohesion pass (no mechanics changed), moving the look toward *Trail of Embers*' plainer, chunkier pixel-art sensibility, beach-themed:
+* Sand and water are now mostly flat, plain fills with only a sparse pixel-speckle hint of grain - no dense speckle fields, tile-checker shading, or banded waves. The shoreline keeps a single blocky, stepped foam edge as the only "wave" texture.
+* Sailor is a simple back-facing sprite; her pigtails - two big, plain hair bunches held clear of her head - are her main defining feature. Gold hair ties and other decorative hair detail were removed. Her blue outfit is plainer (no collar trim or highlight band).
+* Bupa stays mostly gray with a small hint of white (paws/chest); his meow/worry cue is now a plain chip with no gold border.
+* Shells (fan/scallop, spiral, clam-arc) are simplified to one flat fill, one shadow shape, and a single outline stroke each - no ridge-line loops or stacked curves - so they read as clean silhouettes rather than illustration.
+* Dune vegetation (grass tufts, the larger dune plant) is simplified to two tones and fewer blades/leaf clusters, so it supports the scene without competing with it.
+* All game-world drawing still routes through the shared half-resolution pixel buffer, upscaled with nearest-neighbor scaling, so characters, terrain, and objects share one consistent, chunky pixel scale.
 
 ## Out-of-Scope List
 

@@ -318,7 +318,7 @@
       });
 
       // Spawn shells surrounding the interest point or to the sides of the path
-      // Some shells close, some far away (to lure Sailor away into dunes or tide wet sand)
+      // Some shells close, some far away (to lure Sailor away into dunes or the shoreline)
       let numShells = 3 + Math.floor(Math.random() * 3);
       for (let s = 0; s < numShells; s++) {
         let shellX, shellY;
@@ -327,7 +327,7 @@
           shellX = x + (Math.random() - 0.5) * 140;
           shellY = currentY + (Math.random() - 0.5) * 140;
         } else {
-          // Far shell (towards dunes or wet sand)
+          // Far shell (towards dunes or the shoreline)
           let side = Math.random() < 0.5 ? 1 : -1;
           shellX = x + side * (160 + Math.random() * 120);
           shellY = currentY + (Math.random() - 0.5) * 200;
@@ -591,27 +591,17 @@
 
   // --- VISUAL HELPERS (texture, shading, shells, shadows) ---
 
-  // Deterministic scatter points inside one repeating tile, expressed as
-  // fractions (0..1) of the tile so the same field can be reused at
-  // different tile sizes for different surfaces.
-  const DRY_SAND_SPECKLES = [
-    { dx: 0.10, dy: 0.20, size: 2 }, { dx: 0.42, dy: 0.10, size: 1 },
-    { dx: 0.72, dy: 0.35, size: 2 }, { dx: 0.25, dy: 0.62, size: 1 },
-    { dx: 0.86, dy: 0.55, size: 2 }, { dx: 0.55, dy: 0.80, size: 1 },
-    { dx: 0.05, dy: 0.85, size: 2 }, { dx: 0.92, dy: 0.15, size: 1 }
+  // A few sparse scatter points, reused at different tile pitches. Kept
+  // deliberately thin so surfaces read as plain sand/dune with just a hint
+  // of grain rather than a texture.
+  const SAND_SPECKLES = [
+    { dx: 0.20, dy: 0.30, size: 2 },
+    { dx: 0.70, dy: 0.60, size: 2 },
+    { dx: 0.45, dy: 0.85, size: 2 }
   ];
-  const DRY_SAND_SPECKLES_LIGHT = [
-    { dx: 0.28, dy: 0.35, size: 1 }, { dx: 0.60, dy: 0.65, size: 2 },
-    { dx: 0.15, dy: 0.50, size: 1 }, { dx: 0.80, dy: 0.85, size: 1 }
-  ];
-  const WET_SAND_DAPPLES = [
-    { dx: 0.15, dy: 0.20, size: 2 }, { dx: 0.50, dy: 0.40, size: 3 },
-    { dx: 0.80, dy: 0.15, size: 2 }, { dx: 0.30, dy: 0.70, size: 2 },
-    { dx: 0.65, dy: 0.75, size: 3 }
-  ];
-  const OCEAN_SPARKLES = [
-    { dx: 0.20, dy: 0.30, size: 2 }, { dx: 0.60, dy: 0.15, size: 2 },
-    { dx: 0.40, dy: 0.70, size: 2 }, { dx: 0.80, dy: 0.55, size: 2 }
+  const DUNE_SPECKLES = [
+    { dx: 0.30, dy: 0.40, size: 2 },
+    { dx: 0.75, dy: 0.70, size: 2 }
   ];
 
   // Scatters a fixed speckle field across a region by repeating one small
@@ -632,46 +622,6 @@
           }
         }
       }
-    }
-  }
-
-  // Deterministic 0..1 hash for a tile coordinate, used to break up terrain
-  // shading so it reads as weathered ground rather than a repeating checker.
-  function tileHash(row, col) {
-    const v = Math.sin(row * 12.9898 + col * 78.233) * 43758.5453;
-    return v - Math.floor(v);
-  }
-
-  // Faint tile-to-tile tone variation, sparsely applied so it reads as
-  // subtle terrain wear rather than a floor-tile checkerboard.
-  function drawTileShading(x0, x1, yTop, yBottom, tileSize, colorA, colorB) {
-    const colStart = Math.floor(x0 / tileSize);
-    const colEnd = Math.floor(x1 / tileSize);
-    const rowStart = Math.floor(yTop / tileSize);
-    const rowEnd = Math.floor(yBottom / tileSize);
-    ctx.save();
-    ctx.globalAlpha = 0.45;
-    ctx.fillStyle = colorB;
-    for (let row = rowStart; row <= rowEnd; row++) {
-      for (let col = colStart; col <= colEnd; col++) {
-        if (tileHash(row, col) > 0.6) continue;
-        const wx = Math.max(x0, col * tileSize);
-        const ww = Math.min(x1, (col + 1) * tileSize) - wx;
-        if (ww <= 0) continue;
-        ctx.fillRect(wx, row * tileSize, ww, tileSize);
-      }
-    }
-    ctx.restore();
-  }
-
-  // Horizontal wave bands for the ocean, two alternating blue tones.
-  function drawOceanBands(x0, x1, yTop, yBottom) {
-    const bandH = 14;
-    const rowStart = Math.floor(yTop / bandH);
-    const rowEnd = Math.floor(yBottom / bandH);
-    for (let row = rowStart; row <= rowEnd; row++) {
-      ctx.fillStyle = row % 2 === 0 ? '#5b9db3' : '#6bb0c6';
-      ctx.fillRect(x0, row * bandH, x1 - x0, bandH);
     }
   }
 
@@ -719,97 +669,86 @@
 
   // Shell silhouettes: fan/scallop, spiral/conch, and clam-arc. Purely a
   // cosmetic pick (shell.shapeType) - no rarity or gameplay difference.
+  // Kept to one plain fill, one shadow shape, and a single outline stroke
+  // each - no ridge-line loops or stacked curves - so shells read as clean
+  // silhouettes rather than decorative illustration.
   function drawShellShape(shell) {
     const s = shell.size;
     const color = shell.color;
-    const dark = shadeColor(color, -55);
+    const dark = shadeColor(color, -50);
     const outline = '#7a6a52';
     // The whole scene renders through a half-scale pixel buffer (see
     // PIXEL_SCALE), so hairline strokes need to be drawn thicker here or
     // they anti-alias away to nothing once downscaled.
     const OUTLINE_LW = 2.5;
-    const RIDGE_LW = 2;
 
     ctx.save();
     ctx.translate(shell.x, shell.y);
 
     if (shell.shapeType === 0) {
-      // Fan / scallop shell - hinge at the BOTTOM with the fan spreading
-      // upward (the iconic scallop read), not apex-up like a cone/teepee.
+      // Fan / scallop shell - a plain fan with three shallow, blocky top
+      // steps so the silhouette reads as a scallop rather than a pennant.
       ctx.beginPath();
       ctx.moveTo(0, s);
-      ctx.lineTo(-s * 0.95, -s * 0.55);
-      ctx.quadraticCurveTo(-s * 0.5, -s * 0.95, -s * 0.25, -s * 0.7);
-      ctx.quadraticCurveTo(0, -s * 1.05, s * 0.25, -s * 0.7);
-      ctx.quadraticCurveTo(s * 0.5, -s * 0.95, s * 0.95, -s * 0.55);
+      ctx.lineTo(-s, -s * 0.6);
+      ctx.lineTo(-s * 0.75, -s * 0.6);
+      ctx.lineTo(-s * 0.75, -s * 0.8);
+      ctx.lineTo(-s * 0.35, -s * 0.8);
+      ctx.lineTo(-s * 0.35, -s * 0.6);
+      ctx.lineTo(-s * 0.2, -s * 0.6);
+      ctx.lineTo(-s * 0.2, -s * 0.85);
+      ctx.lineTo(s * 0.2, -s * 0.85);
+      ctx.lineTo(s * 0.2, -s * 0.6);
+      ctx.lineTo(s * 0.35, -s * 0.6);
+      ctx.lineTo(s * 0.35, -s * 0.8);
+      ctx.lineTo(s * 0.75, -s * 0.8);
+      ctx.lineTo(s * 0.75, -s * 0.6);
+      ctx.lineTo(s, -s * 0.6);
       ctx.closePath();
       ctx.fillStyle = color;
       ctx.fill();
       ctx.lineWidth = OUTLINE_LW;
       ctx.strokeStyle = outline;
       ctx.stroke();
-      // Ridges start partway up from the hinge rather than at the hinge
-      // itself, so they fan out as distinct lines instead of converging
-      // into one solid dark wedge at small gameplay scale.
-      ctx.lineWidth = RIDGE_LW;
-      ctx.strokeStyle = dark;
-      for (let i = -3; i <= 3; i++) {
-        if (i === 0) continue;
-        ctx.beginPath();
-        ctx.moveTo(i * s * 0.08, s * 0.55);
-        ctx.lineTo(i * s * 0.32, -s * 0.75);
-        ctx.stroke();
-      }
+      // One shadow wedge at the hinge - the only interior detail.
+      ctx.fillStyle = dark;
+      ctx.beginPath();
+      ctx.moveTo(0, s);
+      ctx.lineTo(-s * 0.3, s * 0.2);
+      ctx.lineTo(s * 0.3, s * 0.2);
+      ctx.closePath();
+      ctx.fill();
     } else if (shell.shapeType === 1) {
-      // Spiral / conch shell - a pointed teardrop body (not a plain oval,
-      // which reads as a pebble) with a bold outline-colored coil so the
-      // spiral stays visible at small gameplay scale.
+      // Spiral / conch shell - a plain teardrop with one coil arc.
       ctx.beginPath();
-      ctx.moveTo(0, -s * 1.1);
-      ctx.quadraticCurveTo(s * 0.65, -s * 0.6, s * 0.55, s * 0.15);
-      ctx.quadraticCurveTo(s * 0.45, s * 0.9, 0, s * 0.95);
-      ctx.quadraticCurveTo(-s * 0.45, s * 0.9, -s * 0.55, s * 0.15);
-      ctx.quadraticCurveTo(-s * 0.65, -s * 0.6, 0, -s * 1.1);
+      ctx.moveTo(0, -s);
+      ctx.quadraticCurveTo(s * 0.6, 0, 0, s);
+      ctx.quadraticCurveTo(-s * 0.6, 0, 0, -s);
       ctx.closePath();
       ctx.fillStyle = color;
       ctx.fill();
       ctx.lineWidth = OUTLINE_LW;
       ctx.strokeStyle = outline;
       ctx.stroke();
-      ctx.strokeStyle = outline;
-      ctx.lineWidth = RIDGE_LW + 0.5;
-      ctx.beginPath();
-      ctx.arc(0, -s * 0.2, s * 0.42, 0.2, Math.PI * 1.9);
-      ctx.stroke();
-      ctx.beginPath();
-      ctx.arc(0, 0, s * 0.24, 0.4, Math.PI * 1.7);
-      ctx.stroke();
-      ctx.fillStyle = outline;
-      ctx.beginPath();
-      ctx.arc(0, s * 0.12, s * 0.08, 0, Math.PI * 2);
-      ctx.fill();
-    } else {
-      // Clam shell - wide domed arc with a flat hinge base and small hinge
-      // "ears", plus concentric growth-ring bands (how clams actually grow)
-      // instead of a single flat line that read as a mushroom cap's gills.
-      ctx.beginPath();
-      ctx.arc(0, s * 0.35, s * 0.85, Math.PI * 1.02, Math.PI * 1.98);
-      ctx.closePath();
-      ctx.fillStyle = color;
-      ctx.fill();
-      ctx.lineWidth = OUTLINE_LW;
-      ctx.strokeStyle = outline;
-      ctx.stroke();
-      ctx.fillStyle = color;
-      ctx.fillRect(-s * 0.95, s * 0.28, s * 0.18, s * 0.14);
-      ctx.fillRect(s * 0.77, s * 0.28, s * 0.18, s * 0.14);
-      ctx.lineWidth = RIDGE_LW;
       ctx.strokeStyle = dark;
+      ctx.lineWidth = OUTLINE_LW;
       ctx.beginPath();
-      ctx.arc(0, s * 0.35, s * 0.62, Math.PI * 1.08, Math.PI * 1.92);
+      ctx.arc(0, 0, s * 0.4, 0.3, Math.PI * 1.7);
       ctx.stroke();
+    } else {
+      // Clam shell - a plain domed arc, flat hinge base, one growth ring.
       ctx.beginPath();
-      ctx.arc(0, s * 0.35, s * 0.38, Math.PI * 1.15, Math.PI * 1.85);
+      ctx.arc(0, s * 0.3, s * 0.8, Math.PI, Math.PI * 2);
+      ctx.closePath();
+      ctx.fillStyle = color;
+      ctx.fill();
+      ctx.lineWidth = OUTLINE_LW;
+      ctx.strokeStyle = outline;
+      ctx.stroke();
+      ctx.strokeStyle = dark;
+      ctx.lineWidth = OUTLINE_LW;
+      ctx.beginPath();
+      ctx.arc(0, s * 0.3, s * 0.5, Math.PI, Math.PI * 2);
       ctx.stroke();
     }
 
@@ -830,32 +769,26 @@
     const viewTop = cameraY - 100;
     const viewBottom = cameraY + 700;
 
-    // 1. Draw sand beach background
-    // Dry sand base
-    ctx.fillStyle = '#f0e3c5';
+    // 1. Draw sand beach background - flat surfaces with only a sparse
+    // pixel-speckle hint of grain, no checker shading or banded texture.
+    ctx.fillStyle = '#e8d9ae';
     ctx.fillRect(0, viewTop, canvas.width, 800);
-    drawTileShading(220, 720, viewTop, viewBottom, 48, '#f0e3c5', '#ead9b8');
-    drawSpeckleField(220, 720, viewTop, viewBottom, 40, DRY_SAND_SPECKLES, '#d8c49a');
-    drawSpeckleField(220, 720, viewTop, viewBottom, 40, DRY_SAND_SPECKLES_LIGHT, '#fbf1da');
+    drawSpeckleField(150, 720, viewTop, viewBottom, 64, SAND_SPECKLES, '#d3bd8c');
 
-    // Draw Ocean (water) on left, banded with a gentle wave pattern
-    drawOceanBands(0, 150, viewTop, viewBottom);
-    drawSpeckleField(0, 150, viewTop, viewBottom, 36, OCEAN_SPARKLES, '#bfe6ec');
+    // Draw Ocean (water) on left - a plain flat fill; the shoreline foam
+    // below is the only "wave" the water shows.
+    ctx.fillStyle = '#5b9db3';
+    ctx.fillRect(0, viewTop, 150, 800);
 
-    // Draw wet sand gradient/transition
-    ctx.fillStyle = '#dfcfab';
-    ctx.fillRect(150, viewTop, 70, 800);
-    drawTileShading(150, 220, viewTop, viewBottom, 16, '#dfcfab', '#d3c09d');
-    drawSpeckleField(150, 220, viewTop, viewBottom, 24, WET_SAND_DAPPLES, '#c3ac83');
-
-    // Water shoreline foam - blocky, stepped edge rather than a smooth curve
+    // Water shoreline foam - blocky, stepped edge; the only textured hint
+    // the beach carries for white water, per the plain-surfaces direction.
     drawShoreFoam(150, viewTop, viewBottom);
 
-    // Draw dunes & dry grass on the right side
-    ctx.fillStyle = '#dbca9a'; // dune sand
+    // Draw dunes & dry grass on the right side - flat, with a sparse
+    // speckle hint suggesting dune texture, nothing busier.
+    ctx.fillStyle = '#d4c090'; // dune sand
     ctx.fillRect(720, viewTop, 80, 800);
-    drawTileShading(720, 800, viewTop, viewBottom, 40, '#dbca9a', '#d1bf8e');
-    drawSpeckleField(720, 800, viewTop, viewBottom, 40, DRY_SAND_SPECKLES, '#c3b17f');
+    drawSpeckleField(720, 800, viewTop, viewBottom, 56, DUNE_SPECKLES, '#c2ac7c');
 
     // Draw Dune tufts & plants
     for (let y = Math.floor(viewTop / 120) * 120 - 120; y < viewBottom; y += 120) {
@@ -905,10 +838,11 @@
 
   // --- DRAWING HELPER FUNCTIONS ---
 
+  // Two tones only (base + shadow) - simple silhouettes that support the
+  // scene without competing with it.
   const GRASS_PALETTES = [
-    { base: '#7f9a5c', highlight: '#a8c47e', shadow: '#5f7a45' },
-    { base: '#8aa564', highlight: '#b3cf88', shadow: '#688048' },
-    { base: '#768f52', highlight: '#9fbb76', shadow: '#57703c' }
+    { base: '#7f9a5c', shadow: '#5f7a45' },
+    { base: '#8aa564', shadow: '#688048' }
   ];
 
   function drawGrassTuft(x, y, variant) {
@@ -916,57 +850,27 @@
 
     // Grounding shadow so the tuft reads as planted in the sand
     ctx.fillStyle = p.shadow;
-    ctx.globalAlpha = 0.5;
     ctx.fillRect(x - 5, y + 10, 12, 3);
-    ctx.globalAlpha = 1.0;
 
-    // Layered blades - base color first, varied lengths/angles
+    // Three plain blades - no highlight layer
     ctx.fillStyle = p.base;
-    ctx.fillRect(x - 1, y - 4, 3, 14);
-    ctx.fillRect(x - 6, y, 3, 12);
-    ctx.fillRect(x + 5, y + 2, 3, 10);
-    ctx.fillRect(x - 3, y + 4, 2, 8);
-    ctx.fillRect(x + 2, y - 2, 2, 12);
-
-    // Shadow side on the base of the tallest blades for depth
-    ctx.fillStyle = p.shadow;
-    ctx.fillRect(x - 6, y + 8, 3, 4);
-    ctx.fillRect(x + 5, y + 8, 3, 4);
-
-    // Thin highlight blades on top for a layered, detailed silhouette
-    ctx.fillStyle = p.highlight;
-    ctx.fillRect(x, y - 4, 1, 8);
-    ctx.fillRect(x - 5, y, 1, 7);
-    ctx.fillRect(x + 6, y + 2, 1, 6);
-    ctx.fillRect(x - 2, y - 6, 2, 2);
+    ctx.fillRect(x - 1, y - 2, 3, 12);
+    ctx.fillRect(x - 6, y + 2, 3, 10);
+    ctx.fillRect(x + 5, y + 4, 3, 8);
   }
 
-  // Larger dune plant used sparingly among the grass tufts for variety.
+  // Larger dune plant used sparingly among the grass tufts for variety -
+  // one stem, two leaf clusters, two tones.
   function drawDunePlant(x, y) {
     ctx.fillStyle = '#5f7a45';
-    ctx.globalAlpha = 0.5;
     ctx.fillRect(x - 6, y + 12, 14, 3);
-    ctx.globalAlpha = 1.0;
 
-    // Stem
     ctx.fillStyle = '#7a5a3a';
     ctx.fillRect(x - 1, y - 2, 2, 14);
 
-    // Leaf clusters
     ctx.fillStyle = '#7f9a5c';
-    ctx.fillRect(x - 8, y - 10, 7, 6);
-    ctx.fillRect(x + 2, y - 14, 7, 6);
-    ctx.fillRect(x - 4, y - 18, 7, 6);
-
-    ctx.fillStyle = '#a8c47e';
-    ctx.fillRect(x - 7, y - 10, 3, 2);
-    ctx.fillRect(x + 3, y - 14, 3, 2);
-    ctx.fillRect(x - 3, y - 18, 3, 2);
-
-    ctx.fillStyle = '#5f7a45';
-    ctx.fillRect(x - 8, y - 5, 7, 2);
-    ctx.fillRect(x + 2, y - 9, 7, 2);
-    ctx.fillRect(x - 4, y - 13, 7, 2);
+    ctx.fillRect(x - 7, y - 10, 6, 6);
+    ctx.fillRect(x + 2, y - 14, 6, 6);
   }
 
   function drawInterestPoint(ip) {
@@ -981,58 +885,31 @@
     if (ip.type === 'rock') {
       // Main rock shape - warm stone tone, deliberately distinct from
       // Bupa's cool gray (#808285) so he stays readable stopped beside it.
+      // Flat fill plus one shadow band - no separate highlight patches.
       ctx.fillStyle = '#6e6a5f';
       ctx.fillRect(-12, -8, 24, 16);
-      ctx.fillStyle = '#8f8a78'; // highlights
-      ctx.fillRect(-10, -8, 8, 4);
-      ctx.fillRect(2, -4, 6, 4);
       ctx.fillStyle = '#46433a'; // shadow
       ctx.fillRect(-12, 4, 24, 4);
-      ctx.fillRect(8, 0, 4, 4);
       // Small shell-cluster accents at the base of the rock pile
       drawShellShape({ x: -14, y: 9, size: 5, color: '#e8a9a0', shapeType: 2 });
       drawShellShape({ x: 12, y: 8, size: 4, color: '#8fb9c9', shapeType: 0 });
     }
     else if (ip.type === 'driftwood') {
-      // Driftwood log
+      // Driftwood log - plain fill plus one highlight band, no grain lines
+      // or branch stubs.
       ctx.fillStyle = '#8a5c38';
       ctx.fillRect(-18, -4, 36, 8);
       ctx.fillStyle = '#aa7c58'; // highlight
       ctx.fillRect(-14, -4, 28, 3);
-      // Wood grain lines
-      ctx.strokeStyle = '#6e4424';
-      ctx.lineWidth = 2;
-      ctx.beginPath();
-      ctx.moveTo(-16, -1); ctx.lineTo(16, -1);
-      ctx.moveTo(-16, 2); ctx.lineTo(16, 2);
-      ctx.stroke();
-      // Small branch details
-      ctx.fillStyle = '#6e4424';
-      ctx.fillRect(-10, -8, 4, 4);
-      ctx.fillRect(10, 4, 4, 4);
       // Small grass tuft growing beside the driftwood
       drawGrassTuft(20, -2, Math.round(ip.x));
     }
     else if (ip.type === 'tidepool') {
-      // Water circle
+      // Water circle - no ring, ripple ring, or interior highlights.
       ctx.fillStyle = '#4da2bf';
       ctx.beginPath();
       ctx.arc(0, 0, 18, 0, Math.PI * 2);
       ctx.fill();
-      // Outer wet sand ring
-      ctx.strokeStyle = '#c9b78f';
-      ctx.lineWidth = 3;
-      ctx.stroke();
-      // Ripple ring for added texture
-      ctx.strokeStyle = '#6cbcd8';
-      ctx.lineWidth = 2;
-      ctx.beginPath();
-      ctx.arc(0, 0, 11, 0, Math.PI * 2);
-      ctx.stroke();
-      // Highlights inside water
-      ctx.fillStyle = '#7ecce6';
-      ctx.fillRect(-6, -6, 5, 2);
-      ctx.fillRect(2, 4, 6, 2);
     }
 
     // Draw indicator text above unvisited ones
@@ -1055,60 +932,45 @@
       ctx.scale(-1, 1);
     }
 
-    const hair = '#8b512c';       // warm medium brown
-    const hairShadow = '#6e3d20';
-    const hairHighlight = '#a56b3f';
+    const hair = '#7a4a2a';       // warm medium brown
+    const hairShadow = '#5e3a20';
     const skin = '#ffd1b3';
     const outfit = '#3a7cb5';
     const outfitShadow = '#2d5f8f';
-    const outfitHighlight = '#5c9ad1';
 
     const walkOffset = sailor.isMoving ? Math.sin(Date.now() * 0.015) * 4 : 0;
     const pigtailSway = sailor.isMoving ? Math.sin(Date.now() * 0.012) * 2 : 0;
 
     // 1. Back of head: she faces up the beach, away from the viewer, so the
-    // entire head is hair - no face/eyes are drawn on this side.
+    // entire head is a plain block of hair - no face/eyes drawn on this
+    // side, and no highlight band cluttering the block.
     ctx.fillStyle = hair;
-    ctx.fillRect(-11, -34, 22, 16);
-    ctx.fillStyle = hairHighlight;
-    ctx.fillRect(-8, -33, 10, 3);
+    ctx.fillRect(-9, -32, 18, 14);
     ctx.fillStyle = hairShadow;
-    ctx.fillRect(-11, -20, 22, 2);
+    ctx.fillRect(-9, -20, 18, 2);
 
     // Small sliver of nape skin visible beneath the hair, above the collar
     ctx.fillStyle = skin;
     ctx.fillRect(-3, -18, 6, 6);
 
-    // 2. Pigtails - large and prominent, worn low off the sides of the head,
-    // with hair ties, so they stay readable while walking. The head block
-    // spans x -11..11; pigtails are held at least 4 world px clear of that
-    // edge (was 0-3px) so the gap survives the half-res downscale instead
-    // of anti-aliasing away into one fused head+hair mass.
+    // 2. Pigtails - the sprite's main defining feature: two big, plain
+    // round bunches held clear of the head so they read as pigtails, not a
+    // hat. No hair ties or other decorative detail, just the hair shape
+    // itself. Held 4 world px clear of the head edge so the gap survives
+    // the half-res downscale instead of anti-aliasing away.
     ctx.fillStyle = hair;
-    ctx.fillRect(-23 + pigtailSway, -30, 8, 8);
-    ctx.fillRect(-26 + pigtailSway, -24, 9, 11);
-    ctx.fillRect(-24 + pigtailSway, -14, 6, 8);
-    ctx.fillRect(15 - pigtailSway, -30, 8, 8);
-    ctx.fillRect(17 - pigtailSway, -24, 9, 11);
-    ctx.fillRect(18 - pigtailSway, -14, 6, 8);
+    ctx.fillRect(-23 + pigtailSway, -28, 10, 5);
+    ctx.fillRect(-25 + pigtailSway, -23, 8, 6);
+    ctx.fillRect(13 - pigtailSway, -28, 10, 5);
+    ctx.fillRect(17 - pigtailSway, -23, 8, 6);
 
-    ctx.fillStyle = hairHighlight;
-    ctx.fillRect(-22 + pigtailSway, -28, 3, 3);
-    ctx.fillRect(18 - pigtailSway, -28, 3, 3);
+    ctx.fillStyle = hairShadow;
+    ctx.fillRect(-25 + pigtailSway, -20, 8, 3);
+    ctx.fillRect(17 - pigtailSway, -20, 8, 3);
 
-    // Hair ties - brighter and taller than before so they don't disappear
-    // after downscale.
-    ctx.fillStyle = '#ffd54a';
-    ctx.fillRect(-25 + pigtailSway, -23, 7, 5);
-    ctx.fillRect(18 - pigtailSway, -23, 7, 5);
-
-    // 3. Outfit (blue dress, back view) with a small collar trim at the nape
-    ctx.fillStyle = '#eef3f6';
-    ctx.fillRect(-6, -13, 12, 2);
+    // 3. Outfit - plain blue dress, back view, no collar trim or highlight
     ctx.fillStyle = outfit;
     ctx.fillRect(-10, -11, 20, 15);
-    ctx.fillStyle = outfitHighlight;
-    ctx.fillRect(-8, -11, 16, 4);
     ctx.fillStyle = outfitShadow;
     ctx.fillRect(-10, 0, 20, 4);
 
@@ -1134,7 +996,7 @@
 
   function drawBupa() {
     ctx.save();
-    ctx.translate(bupa.x, bupa.y);
+    ctx.translate(Math.round(bupa.x / 2) * 2, Math.round(bupa.y / 2) * 2);
 
     if (bupa.facingLeft) {
       ctx.scale(-1, 1);
@@ -1158,42 +1020,39 @@
       ctx.fillRect(-6, 2, 4, 4);
       ctx.fillRect(2, 2, 4, 4);
       ctx.fillStyle = white;
-      ctx.fillRect(-6, 5, 4, 2);
-      ctx.fillRect(2, 5, 4, 2);
+      ctx.fillRect(-6, 4, 4, 2);
+      ctx.fillRect(2, 4, 4, 2);
 
       // Tail curled around
       ctx.fillStyle = darkGray;
-      ctx.fillRect(-12, 2, 5, 3);
+      ctx.fillRect(-12, 2, 6, 4);
 
       // Head (facing back, so eyes looking down/sideways)
       ctx.fillStyle = gray;
-      ctx.fillRect(-7, -22, 14, 9);
+      ctx.fillRect(-8, -22, 16, 10);
       // Ears
       ctx.fillStyle = darkGray;
-      ctx.fillRect(-7, -26, 3, 4);
-      ctx.fillRect(4, -26, 3, 4);
+      ctx.fillRect(-8, -26, 4, 4);
+      ctx.fillRect(4, -26, 4, 4);
       // Eyes looking back (white + green)
       ctx.fillStyle = '#ffffff';
-      ctx.fillRect(-4, -18, 2, 3);
-      ctx.fillRect(2, -18, 2, 3);
+      ctx.fillRect(-4, -18, 2, 4);
+      ctx.fillRect(2, -18, 2, 4);
       ctx.fillStyle = '#7ac143'; // green pupil
-      ctx.fillRect(-3, -18, 1, 2);
-      ctx.fillRect(3, -18, 1, 2);
+      ctx.fillRect(-4, -18, 2, 2);
+      ctx.fillRect(2, -18, 2, 2);
 
       // White chest
       ctx.fillStyle = white;
       ctx.fillRect(-2, -10, 4, 6);
 
-      // meow / worry exclamation bubble
+      // meow / worry cue - a plain chip, no gold border or trim
       if (bupa.meowTimer > 0) {
         ctx.scale(bupa.facingLeft ? -1 : 1, 1); // unflip text
-        ctx.fillStyle = 'rgba(26, 28, 30, 0.9)';
-        ctx.fillRect(-25, -45, 50, 16);
-        ctx.strokeStyle = '#e3a857';
-        ctx.lineWidth = 1;
-        ctx.strokeRect(-25, -45, 50, 16);
-        
-        ctx.fillStyle = '#e3a857';
+        ctx.fillStyle = 'rgba(26, 28, 30, 0.85)';
+        ctx.fillRect(-22, -44, 44, 14);
+
+        ctx.fillStyle = '#f4edd2';
         ctx.font = 'bold 9px Courier New';
         ctx.textAlign = 'center';
         ctx.fillText('meow?', 0, -34);
@@ -1209,106 +1068,106 @@
         // --- STAGE 1: Standing sniff (Low head, sniffing interest point) ---
         // Tail
         ctx.fillStyle = darkGray;
-        ctx.fillRect(-14, -12, 6, 3);
+        ctx.fillRect(-14, -12, 6, 4);
         // Body
         ctx.fillStyle = gray;
-        ctx.fillRect(-8, -10, 15, 9);
+        ctx.fillRect(-8, -10, 16, 10);
         // Legs
         ctx.fillStyle = darkGray;
-        ctx.fillRect(-6, -1, 3, 4);
-        ctx.fillRect(2, -1, 3, 4);
+        ctx.fillRect(-6, -2, 4, 4);
+        ctx.fillRect(2, -2, 4, 4);
         ctx.fillStyle = white; // white front paws
-        ctx.fillRect(2, 2, 3, 2);
+        ctx.fillRect(2, 2, 4, 2);
         
         // Head low
         ctx.fillStyle = gray;
-        ctx.fillRect(6, -11, 9, 8);
+        ctx.fillRect(6, -12, 10, 8);
         ctx.fillStyle = darkGray; // ears
-        ctx.fillRect(7, -14, 2, 3);
-        ctx.fillRect(11, -14, 2, 3);
+        ctx.fillRect(8, -14, 2, 4);
+        ctx.fillRect(12, -14, 2, 4);
         ctx.fillStyle = '#7ac143'; // sniffing eye
-        ctx.fillRect(10, -9, 2, 2);
+        ctx.fillRect(10, -10, 2, 2);
       } 
       else if (bupa.stateProgress < 0.8) {
         // --- STAGE 2: Sitting stare (sitting down staring) ---
         // Body (sitting)
         ctx.fillStyle = gray;
         ctx.fillRect(-8, -8, 14, 10);
-        ctx.fillRect(-5, -12, 10, 5);
+        ctx.fillRect(-6, -12, 12, 6);
         // Legs
         ctx.fillStyle = darkGray;
-        ctx.fillRect(-5, 2, 3, 3);
-        ctx.fillRect(1, 2, 3, 3);
+        ctx.fillRect(-6, 2, 4, 4);
+        ctx.fillRect(2, 2, 4, 4);
         ctx.fillStyle = white;
-        ctx.fillRect(1, 4, 3, 2);
+        ctx.fillRect(2, 4, 4, 2);
         
         // Tail
         ctx.fillStyle = darkGray;
-        ctx.fillRect(-12, 0, 5, 3);
+        ctx.fillRect(-12, 0, 6, 4);
 
         // Head looking forward-down
         ctx.fillStyle = gray;
-        ctx.fillRect(2, -18, 9, 8);
+        ctx.fillRect(2, -18, 10, 8);
         ctx.fillStyle = darkGray; // ears
-        ctx.fillRect(3, -21, 2, 3);
-        ctx.fillRect(7, -21, 2, 3);
+        ctx.fillRect(4, -22, 2, 4);
+        ctx.fillRect(8, -22, 2, 4);
         ctx.fillStyle = '#7ac143'; // eye
-        ctx.fillRect(6, -15, 2, 2);
+        ctx.fillRect(6, -16, 2, 2);
       } 
       else {
         // --- STAGE 3: About to leave (standing alert, tail wagging) ---
         // Tail wag animation
-        let tailOffset = Math.floor(Date.now() / 150) % 2 * 3;
+        const tailOffset = Math.floor(Date.now() / 150) % 2 * 2;
         ctx.fillStyle = darkGray;
-        ctx.fillRect(-14, -12 - tailOffset, 6, 3);
+        ctx.fillRect(-14, -12 - tailOffset, 6, 4);
         
         // Body
         ctx.fillStyle = gray;
-        ctx.fillRect(-8, -12, 15, 9);
+        ctx.fillRect(-8, -12, 16, 10);
         // Legs
         ctx.fillStyle = darkGray;
-        ctx.fillRect(-6, -3, 3, 6);
-        ctx.fillRect(3, -3, 3, 6);
+        ctx.fillRect(-6, -4, 4, 6);
+        ctx.fillRect(4, -4, 4, 6);
         ctx.fillStyle = white;
-        ctx.fillRect(3, 2, 3, 2);
+        ctx.fillRect(4, 2, 4, 2);
 
         // Head high & alert
         ctx.fillStyle = gray;
-        ctx.fillRect(4, -19, 9, 8);
+        ctx.fillRect(4, -20, 10, 8);
         ctx.fillStyle = darkGray; // ears
-        ctx.fillRect(5, -22, 2, 3);
-        ctx.fillRect(9, -22, 2, 3);
+        ctx.fillRect(6, -22, 2, 4);
+        ctx.fillRect(10, -22, 2, 4);
         ctx.fillStyle = '#7ac143'; // eye
         ctx.fillRect(8, -16, 2, 2);
       }
     } 
     else {
       // --- TROTTING ---
-      let walkCycle = Math.sin(Date.now() * 0.02) * 3;
+      const walkCycle = Math.round(Math.sin(Date.now() * 0.02)) * 2;
       
       // Tail
       ctx.fillStyle = darkGray;
-      ctx.fillRect(-14, -12, 6, 3);
+      ctx.fillRect(-14, -12, 6, 4);
       
       // Body
       ctx.fillStyle = gray;
-      ctx.fillRect(-8, -12, 15, 9);
+      ctx.fillRect(-8, -12, 16, 10);
 
       // Legs trotting animation
       ctx.fillStyle = darkGray;
-      ctx.fillRect(-6, -3 + walkCycle, 3, 6);
-      ctx.fillRect(3, -3 - walkCycle, 3, 6);
+      ctx.fillRect(-6, -4 + walkCycle, 4, 6);
+      ctx.fillRect(4, -4 - walkCycle, 4, 6);
       ctx.fillStyle = white; // white front paw
-      ctx.fillRect(3, 2 - walkCycle, 3, 2);
+      ctx.fillRect(4, 2 - walkCycle, 4, 2);
 
       // Head
       ctx.fillStyle = gray;
-      ctx.fillRect(4, -18, 9, 8);
+      ctx.fillRect(4, -18, 10, 8);
       ctx.fillStyle = darkGray; // ears
-      ctx.fillRect(5, -21, 2, 3);
-      ctx.fillRect(9, -21, 2, 3);
+      ctx.fillRect(6, -22, 2, 4);
+      ctx.fillRect(10, -22, 2, 4);
       ctx.fillStyle = '#7ac143'; // eye
-      ctx.fillRect(8, -15, 2, 2);
+      ctx.fillRect(8, -16, 2, 2);
     }
 
     ctx.restore();
