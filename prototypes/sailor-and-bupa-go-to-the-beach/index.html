@@ -717,13 +717,24 @@
   // deliberately thin so surfaces read as plain sand/dune with just a hint
   // of grain rather than a texture.
   const SAND_SPECKLES = [
-    { dx: 0.20, dy: 0.30, size: 2 },
-    { dx: 0.70, dy: 0.60, size: 2 },
-    { dx: 0.45, dy: 0.85, size: 2 }
+    // Cluster A: Sparse fleck cluster
+    { dx: 0.15, dy: 0.20, w: 2, h: 2 },
+    { dx: 0.18, dy: 0.23, w: 1, h: 1 },
+
+    // Cluster B: Directional grain (horizontal dash)
+    { dx: 0.65, dy: 0.45, w: 3, h: 1 },
+
+    // Cluster C: Rare static pawprint / shell imprint detail
+    { dx: 0.35, dy: 0.75, w: 2, h: 2 },
+    { dx: 0.32, dy: 0.72, w: 1, h: 1 },
+    { dx: 0.38, dy: 0.72, w: 1, h: 1 }
   ];
   const DUNE_SPECKLES = [
-    { dx: 0.30, dy: 0.40, size: 2 },
-    { dx: 0.75, dy: 0.70, size: 2 }
+    // Cluster A: Grain line
+    { dx: 0.25, dy: 0.35, w: 3, h: 1 },
+    // Cluster B: Flecks
+    { dx: 0.70, dy: 0.65, w: 2, h: 2 },
+    { dx: 0.73, dy: 0.68, w: 1, h: 1 }
   ];
 
   // Scatters a fixed speckle field across a region by repeating one small
@@ -740,33 +751,53 @@
           const wx = col * tileSize + sp.dx * tileSize;
           const wy = row * tileSize + sp.dy * tileSize;
           if (wx >= x0 && wx <= x1) {
-            ctx.fillRect(Math.floor(wx), Math.floor(wy), sp.size, sp.size);
+            const w = sp.w !== undefined ? sp.w : sp.size;
+            const h = sp.h !== undefined ? sp.h : sp.size;
+            ctx.fillRect(Math.floor(wx), Math.floor(wy), w, h);
           }
         }
       }
     }
   }
 
-  // Restrained, blocky, broken foam marks along the fixed shoreline boundary
-  // (boundaryX never moves) - built from the same small dash/dot vocabulary
-  // as drawWaterFlecks/drawWaterGlints instead of a thick continuous band,
-  // so the waterline reads as one more of the water's white bits rather
-  // than a separate border. Gaps come from a fixed per-row pattern (not
-  // re-rolled per frame), so the break-up reads as broken foam, not flicker.
+  // Shoreline foam built from the same small dash/dot vocabulary as
+  // drawWaterFlecks/drawWaterGlints, sharing visual DNA to feel like one
+  // shared visual language instead of a rigid borders. Uses irregular
+  // spacing and shapes, keeping average water boundary fixed at boundaryX (150).
   function drawShoreFoam(boundaryX, yTop, yBottom) {
-    const step = 14;
+    const step = 8;
     const rowStart = Math.floor(yTop / step);
     const rowEnd = Math.floor(yBottom / step);
     const t = performance.now() * 0.0006;
 
     for (let row = rowStart; row <= rowEnd; row++) {
-      const cell = Math.abs(Math.sin(row * 12.9898)) % 1;
-      if (cell < 0.32) continue; // skip roughly a third of rows -> broken edge
+      const hash = Math.abs(Math.sin(row * 12.9898 + 0.123)) % 1;
+      if (hash < 0.65) continue; // skip most rows to create natural, irregular spacing
 
-      const inset = cell > 0.74 ? 5 : 0; // a minority of chunks sit a touch further into the water
+      const variant = Math.floor(hash * 100) % 4;
+      const xOffset = Math.floor(hash * 73) % 7 - 3; // range -3 to +3
+      const y = row * step;
+
       const pulse = Math.sin(t * 2.2 + row * 0.9);
-      ctx.fillStyle = pulse > 0.1 ? '#ffffff' : '#eaf6f7';
-      ctx.fillRect(boundaryX - 3 - inset, row * step + 2, 5, 3);
+      ctx.fillStyle = pulse > 0.3 ? '#ffffff' : '#eaf6f7';
+
+      const baseCol = boundaryX + xOffset;
+
+      if (variant === 0) {
+        // Horizontal dash matching water flecks
+        ctx.fillRect(baseCol - 2, y, 4, 2);
+      } else if (variant === 1) {
+        // Single dot matching water glints
+        ctx.fillRect(baseCol - 1, y, 2, 2);
+      } else if (variant === 2) {
+        // Small two-part cluster
+        ctx.fillRect(baseCol - 3, y, 3, 2);
+        ctx.fillRect(baseCol + 1, y + 2, 2, 2);
+      } else {
+        // Displaced dash
+        ctx.fillRect(baseCol - 1, y, 3, 2);
+        ctx.fillRect(baseCol - 4, y + 1, 2, 1);
+      }
     }
   }
 
@@ -951,7 +982,7 @@
 
     // Draw Ocean (water) on left - a plain flat fill; the shoreline foam
     // below is the only "wave" the water shows.
-    ctx.fillStyle = '#3c8aa3';
+    ctx.fillStyle = '#2b96b7';
     ctx.fillRect(0, viewTop, 150, 800);
 
     // Procedural water details
@@ -986,6 +1017,12 @@
       if (!shell.collected && !shell.missed) {
         drawGroundShadow(shell.x, shell.y + shell.size * 0.6, shell.size * 0.6, shell.size * 0.28);
         drawShellShape(shell);
+        // Very limited deterministic shell-adjacent sand marks
+        ctx.fillStyle = '#c9a873';
+        const markOffset = Math.abs(Math.sin(shell.x * 17.5 + shell.y * 31.2)) % 1;
+        if (markOffset > 0.45) {
+          ctx.fillRect(shell.x + (markOffset > 0.72 ? 9 : -11), shell.y + 4, 2, 1);
+        }
       }
     }
 
@@ -1035,8 +1072,8 @@
   // Two tones only (base + shadow) - simple silhouettes that support the
   // scene without competing with it.
   const GRASS_PALETTES = [
-    { base: '#89b364', shadow: '#5c7a3f' },
-    { base: '#93b96c', shadow: '#628a42' }
+    { base: '#8ec25d', shadow: '#568132' },
+    { base: '#96c55d', shadow: '#5c9237' }
   ];
 
   function drawGrassTuft(x, y, variant) {
@@ -1069,7 +1106,7 @@
   // Larger dune plant used sparingly among the grass tufts for variety -
   // one stem, two leaf clusters, two tones.
   function drawDunePlant(x, y, row) {
-    ctx.fillStyle = '#5c7a3f';
+    ctx.fillStyle = '#568132';
     ctx.fillRect(x - 6, y + 12, 14, 3);
 
     // Calculate sway
@@ -1084,7 +1121,7 @@
     ctx.fillRect(x - 1, y + 5, 2, 7); // bottom stem
     ctx.fillRect(x - 1 + swayOffset, y - 2, 2, 7); // top stem
 
-    ctx.fillStyle = '#89b364';
+    ctx.fillStyle = '#8ec25d';
     ctx.fillRect(x - 7 + swayOffset, y - 10, 6, 6);
     ctx.fillRect(x + 2 + swayOffset, y - 14, 6, 6);
   }
@@ -1122,17 +1159,17 @@
     }
     else if (ip.type === 'tidepool') {
       // Water circle
-      ctx.fillStyle = '#3f93b3';
+      ctx.fillStyle = '#2e9dbf';
       ctx.beginPath();
       ctx.arc(0, 0, 18, 0, Math.PI * 2);
       ctx.fill();
       
       // Inner crescent (shimmer)
-      ctx.fillStyle = '#6cb9d1';
+      ctx.fillStyle = '#5ec3df';
       ctx.beginPath();
       ctx.arc(-2, -2, 12, 0, Math.PI * 2);
       ctx.fill();
-      ctx.fillStyle = '#3f93b3';
+      ctx.fillStyle = '#2e9dbf';
       ctx.beginPath();
       ctx.arc(0, 0, 13, 0, Math.PI * 2);
       ctx.fill();
@@ -1159,7 +1196,7 @@
   // Sprite-only shrink applied inside drawSailor(); does not touch
   // sailor.width/height (unused for movement/collision), CONFIG, or any
   // physics/collection radius.
-  const SAILOR_DRAW_SCALE = 0.84;
+  const SAILOR_DRAW_SCALE = 0.74;
 
   function drawSailor() {
     ctx.save();
@@ -1192,20 +1229,18 @@
     ctx.fillStyle = skin;
     ctx.fillRect(-3, -18, 6, 6);
 
-    // 2. Pigtails - the sprite's main defining feature: two big, plain
-    // round bunches held clear of the head so they read as pigtails, not a
-    // hat. No hair ties or other decorative detail, just the hair shape
-    // itself. Held 4 world px clear of the head edge so the gap survives
-    // the half-res downscale instead of anti-aliasing away.
+    // 2. Pigtails - two big, plain round bunches held clear of the head.
+    // Adjusted raw pigtail offsets outwards by 2px to compensate for the smaller
+    // SAILOR_DRAW_SCALE (0.74) and prevent the head-to-pigtail gap from collapsing.
     ctx.fillStyle = hair;
-    ctx.fillRect(-23 + pigtailSway, -28, 10, 5);
-    ctx.fillRect(-25 + pigtailSway, -23, 8, 6);
-    ctx.fillRect(13 - pigtailSway, -28, 10, 5);
-    ctx.fillRect(17 - pigtailSway, -23, 8, 6);
+    ctx.fillRect(-25 + pigtailSway, -28, 10, 5);
+    ctx.fillRect(-27 + pigtailSway, -23, 8, 6);
+    ctx.fillRect(15 - pigtailSway, -28, 10, 5);
+    ctx.fillRect(19 - pigtailSway, -23, 8, 6);
 
     ctx.fillStyle = hairShadow;
-    ctx.fillRect(-25 + pigtailSway, -20, 8, 3);
-    ctx.fillRect(17 - pigtailSway, -20, 8, 3);
+    ctx.fillRect(-27 + pigtailSway, -20, 8, 3);
+    ctx.fillRect(19 - pigtailSway, -20, 8, 3);
 
     // 3. Outfit - plain blue dress, back view, no collar trim or highlight
     ctx.fillStyle = outfit;

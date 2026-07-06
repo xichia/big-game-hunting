@@ -42,10 +42,10 @@ open prototypes/sailor-and-bupa-go-to-the-beach/index.html
 ## Visual Pass
 
 A visual-simplification pass was applied on top of the earlier visual-cohesion pass (no mechanics changed), moving the look toward *Trail of Embers*' plainer, chunkier pixel-art sensibility, beach-themed:
-* Sand and water are mostly flat, plain fills with only a sparse pixel-speckle hint of grain. The shoreline keeps a blocky, stepped main foam edge as the primary "wave" texture, supplemented by a secondary, sparser foam line, drifting foam flecks, and rare glints.
-* Dune vegetation (grass tufts, dune plants) features a time-based, row-phased quantized 2px sway animation.
+* Sand uses restrained pixel-art grain/fleck clusters and deterministic shell-adjacent marks. Water is a plain fill (slightly more saturated/cyan) with a shoreline foam that shares visual DNA with the interior horizontal foam flecks and glints, using irregular spacing.
+* Dune vegetation (grass tufts, dune plants) features a time-based, row-phased quantized 2px sway animation, using slightly more saturated green tones.
 * Tidepools feature a lighter blue inner crescent shimmer and a blinking white highlight pixel.
-* Sailor is a simple back-facing sprite with warm brown pigtails, a plain blue outfit, and pigtail sway/walk animations.
+* Sailor is a simple back-facing sprite drawn at a smaller scale (0.74) to read as a small child, with compensated raw pigtail spacing to keep the head-to-pigtail gap visible. Outfit and pigtail sway animations are preserved.
 * Bupa stays mostly gray with a small hint of white (paws/chest).
 * Shells are simplified to one flat fill, one shadow shape, and a single outline stroke. Occasional uncollected shells emit a brief 3px cross glint/sparkle.
 * Ambient decorative crabs (red/orange, clawed) rarely emerge from the sand near rocks or the waterline, scuttle horizontally, and burrow back down, leaving a small sand pile.
