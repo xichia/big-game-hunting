@@ -40,17 +40,18 @@ open prototypes/trail-of-embers/index.html
 - **Esc / quit** — not implemented; just close the browser tab (there is no launch menu to exit from)
 
 Prototype testing shortcut:
-- Press number keys 1–5 to jump directly to a level.
+- Press number keys 1–6 to jump directly to a level.
 
 ## Level / challenge structure
 
-Five fixed, hand-placed levels (three from Challenge Pass 1, one larger maze
-from Scale Pass 1, and one larger still from the Fullscreen/Larger Maze
-Pass). The HUD shows the current level. Winning a level offers **N** to
-continue; losing restarts the same level with **R**. The core loop is
-identical in all five — only simple per-level data varies (start positions,
-safe zone, obstacle rectangles, playfield size, and per-level beast speed
-and ember tuning).
+Six fixed, hand-placed levels (three from Challenge Pass 1, one larger maze
+from Scale Pass 1, one larger still from the Fullscreen/Larger Maze Pass,
+and one bigger and tighter still from the bounded maze pass). The HUD shows
+the current level. Winning a level offers **N** to continue; losing
+restarts the same level with **R**. The core loop is identical in all
+six — only simple per-level data varies (start positions, safe zone,
+obstacle rectangles, playfield size, and per-level beast speed and ember
+tuning).
 
 1. **First Light** — the exact layout and tuning from the successful first
    playtest, unchanged. Slightly easy on purpose: teaches ember-as-bait.
@@ -132,6 +133,46 @@ and ember tuning).
      unchanged; on a large enough monitor it displays near-native size.
      This is a plain aspect-ratio-preserving scale, not a camera or
      responsive-layout system.
+6. **The Coiled Maze** (bounded maze pass) — bigger and tighter still, on an
+   1800×1000 playfield (1.25× the area of level 5). Six horizontal bands
+   (one more than level 5's four) split the field into six strips; the
+   route coils in a full S-shape — climb the right side, then the left,
+   then the right, then the left, then the right again to the circle — a
+   longer, tighter weave than any previous level. Deliberate design beats:
+   - **Orientation wall** — a small low block in the start strip, clear of
+     the start and the climb, the same early wall-sliding teach as level
+     5's start chamber.
+   - **Fair dead end** — a second gap beside the real climb out of the
+     start strip looks identical but opens onto a small pocket sealed on
+     every side except that gap: one failed attempt teaches it, same motif
+     as levels 4–5, positioned so it never blocks the main route.
+   - **Intentional squeeze** — a deliberately narrow (30px, half the width
+     of any other gap on this map) chokepoint partway through the first
+     coil — tighter than any passage in a previous level.
+   - **Wide bait chamber** — the beast's home strip opens into a wide, open
+     room around a single landmark block right before the exit gap: room
+     to circle the beast, drop an ember, and slip past.
+   - **Bail-out loop** — a narrow secondary gap partway along the third
+     coil drops a chased player straight into the next strip, skipping the
+     back half of that coil without skipping the whole level.
+   - **Landmark** — one recognizable block in the third strip, a waypoint
+     to loop around, beside the bail-out gap.
+   - **Final jog** — one last lateral step before the circle, rewarding
+     players who remember the layout over ones who beeline.
+   - **Tuning** — beast speed 150 (matches level 3, just above level 5's
+     145) since the extra band and tighter gaps further amplify the
+     wall-ghosting straight-line advantage; ember cooldown/lifetime reuse
+     levels 4–5's numbers (same emergent three-hot-ember limit).
+
+## What changed in the bounded maze pass
+
+- Level 6, "The Coiled Maze," as described above — new level data only.
+- The final win message now says six levels instead of five.
+
+Nothing else changed in this pass: beast AI rules, torch/ember/fog
+rendering, the debug overlay, collision, win/lose conditions, controls, the
+restart flow, player/beast speed, collision radii, ember cooldown/duration,
+and levels 1–5 are untouched.
 
 ## What changed in the Fullscreen/Larger Maze Pass
 
@@ -266,11 +307,12 @@ Run the new larger level (5, "The Deep Maze") at least 3 times.
 
 ## What's implemented
 
-- Five fixed single-screen dark levels (not procedural), each a handful of
+- Six fixed single-screen dark levels (not procedural), each a handful of
   hardcoded obstacle rectangles. Levels 1–3 run at 900×560, level 4 at
-  1280×760, level 5 at 1600×900 (the canvas resizes per level — no
-  scrolling camera; a CSS `max-width`/`max-height` cap shrinks the display
-  to fit smaller windows without changing field-pixel coordinates).
+  1280×760, level 5 at 1600×900, level 6 at 1800×1000 (the canvas resizes
+  per level — no scrolling camera; a CSS `max-width`/`max-height` cap
+  shrinks the display to fit smaller windows without changing field-pixel
+  coordinates).
 - Player movement (8-directional, arrow keys/WASD) with simple
   circle-vs-rectangle collision against obstacles.
 - Constant torch radius around the player — this is the player's baseline
@@ -315,7 +357,7 @@ Run the new larger level (5, "The Deep Maze") at least 3 times.
   hides it), just displayed smaller on tight windows. If maps grow past
   what a CSS scale can keep comfortable, a camera becomes a real (currently
   unauthorized) decision.
-- No explicit ember inventory/cap — levels 4–5 keep the three-ember limit
+- No explicit ember inventory/cap — levels 4–6 keep the three-ember limit
   emergent from cooldown/lifetime tuning, same as level 3.
 - No adaptive/learning AI, no new enemy types — the three rules above are
   the entire beast behavior in every level.
@@ -328,7 +370,7 @@ Run the new larger level (5, "The Deep Maze") at least 3 times.
   only difficulty steps for the challenge pass, not a progression system.
 - No final art — programmer-art circles and rectangles only.
 - No walls blocking the beast (it ignores obstacles by design, per "no
-  pathfinding beyond direct movement toward the target point"). Levels 2–5
+  pathfinding beyond direct movement toward the target point"). Levels 2–6
   deliberately lean on this: walls slow *you*, never it.
 
 ## GREEN / RED criteria (summarized from the probe brief)

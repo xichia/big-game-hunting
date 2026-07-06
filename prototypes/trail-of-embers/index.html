@@ -87,8 +87,9 @@ const LEVEL_DEFAULTS = {
 };
 
 // Challenge Pass 1 gave us three fixed, hand-placed levels; Scale Pass 1
-// added a fourth, larger maze level; the Fullscreen/Larger Maze Pass adds a
-// fifth, larger still. Only simple data varies per level --
+// added a fourth, larger maze level; the Fullscreen/Larger Maze Pass added a
+// fifth, larger still; this bounded maze pass adds a sixth, bigger and
+// tighter yet. Only simple data varies per level --
 // starts, safe zone, obstacle rectangles, playfield size, and beast speed /
 // ember tuning. Obstacles block the player but never the beast, which
 // still walks straight through walls by design.
@@ -261,6 +262,107 @@ const LEVELS = [
       { x: 1480, y: 100, w: 26,  h: 128 },
     ],
   },
+  {
+    name: "The Coiled Maze",
+    // Bounded "bigger, tighter maze" pass: one larger still (1800x1000)
+    // hand-authored maze, more maze-like than level 5 -- not broader, no
+    // new systems. Six horizontal bands (one more than level 5's four)
+    // split the field into six strips; the route coils in a full S-shape,
+    // climbing the right side, then the left, then the right, then the
+    // left, then the right again to the circle -- a longer, tighter weave
+    // than any previous level. Tuning: beast speed 150 (matches level 3,
+    // just above level 5's 145) since the extra band and tighter gaps
+    // amplify the wall-ghosting straight-line advantage further; ember
+    // numbers reuse levels 4-5's (same emergent three-hot-ember limit).
+    // Deliberate design beats:
+    //   - Orientation wall -- a small low block in the start strip, clear
+    //     of the start and the climb, same early wall-sliding teach as
+    //     level 5's start chamber.
+    //   - Fair dead end -- a second gap beside the real climb out of the
+    //     start strip looks identical but opens onto a small pocket sealed
+    //     on every side except that gap: one failed attempt teaches it,
+    //     same motif as levels 4-5, moved so it never blocks the main route.
+    //   - Intentional squeeze -- a deliberately narrow (30px, half the
+    //     width of any other gap on this map) chokepoint partway through
+    //     the first coil, tighter than any previous level's passages.
+    //   - Wide bait chamber -- the guarded strip opens into a wide, open
+    //     room around a single landmark block right before the exit gap:
+    //     room to circle the beast, drop an ember, and slip past.
+    //   - Bail-out loop -- a narrow secondary gap partway along the third
+    //     coil drops a chased player straight into the next strip, skipping
+    //     the back half of that coil without skipping the whole level.
+    //   - Landmark -- one recognizable block in the third strip, a waypoint
+    //     to loop around, beside the bail-out gap.
+    //   - Final jog -- one last lateral step before the circle, rewarding
+    //     players who remember the layout over ones who beeline.
+    fieldW: 1800,
+    fieldH: 1000,
+    playerStart: { x: 70, y: 930 },
+    beastStart: { x: 960, y: 560 },
+    safeZone: { x: 1730, y: 70, r: 28 },
+    beastSpeed: 150,
+    emberCooldownMs: 1500,
+    emberLifetimeMs: 4000,
+    obstacles: [
+      // start strip (y844-1000): small low block, clear of the start
+      // (70,930) and of both band-A gaps below -- early wall-sliding teach
+      { x: 500,  y: 920, w: 160, h: 24 },
+
+      // band A (y820) -- real climb at x1450-1650; decoy gap runs from
+      // x1690 to the field edge, sealed into a dead-end pocket above
+      { x: 0,    y: 820, w: 1450, h: 24 },
+      { x: 1650, y: 820, w: 40,   h: 24 },
+
+      // coil 1, strip S1 (y684-820): dead-end pocket's sealed wall (the
+      // field's east edge is its other side); then a weave -- pass low,
+      // pass high, then the one true squeeze (30px, half the others'
+      // width) -- before the west gap up into the guarded strip
+      { x: 1690, y: 684, w: 26, h: 136 },
+      { x: 1200, y: 684, w: 26, h: 90  }, // pass low below (gap y774-820)
+      { x: 900,  y: 730, w: 26, h: 90  }, // pass high above (gap y684-730)
+      { x: 600,  y: 684, w: 26, h: 96  }, // squeeze top half
+      { x: 600,  y: 810, w: 26, h: 10  }, // squeeze bottom half (gap y780-810, 30px)
+
+      // band B (y660) -- single gap at the west, x150-350
+      { x: 0,    y: 660, w: 150,  h: 24 },
+      { x: 350,  y: 660, w: 1450, h: 24 },
+
+      // coil 2, strip S2 (y524-660, beast's home strip): one chokepoint
+      // hanging from the ceiling near the entrance, then a wide open bait
+      // chamber around a landmark block right before the east exit gap --
+      // room to juke the beast and drop an ember before the final dart
+      { x: 700,  y: 524, w: 26,  h: 80 }, // pass under (gap y604-660)
+      { x: 1150, y: 562, w: 120, h: 60 }, // landmark inside the chamber
+
+      // band C (y500) -- single gap at the east, x1450-1650
+      { x: 0,    y: 500, w: 1450, h: 24 },
+      { x: 1650, y: 500, w: 150,  h: 24 },
+
+      // coil 3, strip S3 (y364-500): one landmark block with generous
+      // clearance above and below (loop around either side)
+      { x: 650,  y: 402, w: 220, h: 60 },
+
+      // band D (y340) -- main gap at the west (x150-350, the full route);
+      // narrow bail-out gap at x880-930 drops a chased player straight
+      // into strip S4 without crossing the rest of this coil
+      { x: 0,    y: 340, w: 150, h: 24 },
+      { x: 350,  y: 340, w: 530, h: 24 },
+      { x: 930,  y: 340, w: 870, h: 24 },
+
+      // coil 4, strip S4 (y204-340): a weave -- pass high, then pass low --
+      // before the final climb east; the bail-out above lands west of both
+      { x: 600,  y: 250, w: 26, h: 90 }, // pass high above (gap y204-250)
+      { x: 1000, y: 204, w: 26, h: 90 }, // pass low below (gap y294-340)
+
+      // band E (y180) -- single gap at the east, x1450-1650, into the
+      // final approach strip
+      { x: 0,    y: 180, w: 1450, h: 24 },
+      { x: 1650, y: 180, w: 150,  h: 24 },
+
+      // approach strip S5 (y0-180): one final lateral jog before the circle
+      { x: 1680, y: 100, w: 26, h: 80 },
+    ],
+  },
 ];
 
 // ---- state -------------------------------------------------------
@@ -419,7 +521,7 @@ function checkWinLose() {
     overlayMsgEl.style.color = "#8fe38f";
     overlayMsgEl.textContent = levelIndex < LEVELS.length - 1
       ? "YOU REACHED SAFETY — press N for the next level"
-      : "ALL FIVE LEVELS CLEAR — press Shift+R to start over";
+      : "ALL SIX LEVELS CLEAR — press Shift+R to start over";
   } else if (dist(player, beast) < PLAYER_RADIUS + BEAST_RADIUS) {
     gameOver = "lost";
     overlayMsgEl.style.color = "#e37d7d";
