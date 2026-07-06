@@ -15,8 +15,8 @@ open prototypes/sailor-and-bupa-go-to-the-beach/index.html
 
 ## Controls
 
-* **WASD / Arrow Keys**: Move Sailor.
-* **R Key**: Restart the prototype.
+* **WASD / Arrow Keys / Left Analog Stick / D-pad**: Move Sailor.
+* **R Key / Gamepad A Button (Only when complete)**: Restart the prototype.
 
 ## Gameplay Mechanics
 
@@ -52,7 +52,6 @@ The following features are explicitly out-of-scope for this prototype:
 * Hazards, crabs, gulls, or health/hearts/death.
 * Countdown timers.
 * Shell rarities.
-* Controller support.
 * Audio (meows are visual-only).
 * Multiple levels or menus.
 * Save state.

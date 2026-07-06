@@ -237,6 +237,7 @@
 
   // Input system
   const keys = {};
+  let gpButton0WasDown = false;
   window.addEventListener('keydown', (e) => {
     keys[e.code] = true;
     if (e.code === 'KeyR') {
@@ -410,6 +411,26 @@
   }
 
   function update(dt) {
+    // Poll gamepad for restart button even if game is over
+    const gamepads = navigator.getGamepads ? navigator.getGamepads() : [];
+    let gp = null;
+    for (let i = 0; i < gamepads.length; i++) {
+      if (gamepads[i]) {
+        gp = gamepads[i];
+        break;
+      }
+    }
+
+    if (gp && gp.buttons && gp.buttons.length > 0) {
+      const button0Down = gp.buttons[0].pressed;
+      if (button0Down && !gpButton0WasDown && isGameOver) {
+        resetGame();
+      }
+      gpButton0WasDown = button0Down;
+    } else {
+      gpButton0WasDown = false;
+    }
+
     if (isGameOver) return;
 
     // --- SAILOR CONTROLS & PHYSICS ---
@@ -417,10 +438,54 @@
     sailor.vy = 0;
     sailor.isMoving = false;
 
+    // Apply keyboard controls exactly as before
     if (keys['ArrowUp'] || keys['KeyW']) { sailor.vy = -CONFIG.SAILOR_SPEED; sailor.isMoving = true; }
     if (keys['ArrowDown'] || keys['KeyS']) { sailor.vy = CONFIG.SAILOR_SPEED; sailor.isMoving = true; }
     if (keys['ArrowLeft'] || keys['KeyA']) { sailor.vx = -CONFIG.SAILOR_SPEED; sailor.facingLeft = true; sailor.isMoving = true; }
     if (keys['ArrowRight'] || keys['KeyD']) { sailor.vx = CONFIG.SAILOR_SPEED; sailor.facingLeft = false; sailor.isMoving = true; }
+
+    // If gamepad is connected, integrate its inputs
+    if (gp) {
+      let gpX = 0;
+      let gpY = 0;
+
+      if (gp.axes && gp.axes.length >= 2) {
+        const lx = gp.axes[0];
+        const ly = gp.axes[1];
+        if (Math.abs(lx) > 0.3) gpX += lx;
+        if (Math.abs(ly) > 0.3) gpY += ly;
+      }
+      if (gp.buttons && gp.buttons.length > 15) {
+        if (gp.buttons[12] && gp.buttons[12].pressed) gpY -= 1;
+        if (gp.buttons[13] && gp.buttons[13].pressed) gpY += 1;
+        if (gp.buttons[14] && gp.buttons[14].pressed) gpX -= 1;
+        if (gp.buttons[15] && gp.buttons[15].pressed) gpX += 1;
+      }
+
+      if (gpX !== 0 || gpY !== 0) {
+        // Convert keyboard velocities to normalized values
+        let kbdX = 0;
+        let kbdY = 0;
+        if (sailor.vx < 0) kbdX = -1;
+        if (sailor.vx > 0) kbdX = 1;
+        if (sailor.vy < 0) kbdY = -1;
+        if (sailor.vy > 0) kbdY = 1;
+
+        // Combine inputs and clamp to valid range [-1, 1]
+        let combinedX = Math.max(-1, Math.min(1, kbdX + gpX));
+        let combinedY = Math.max(-1, Math.min(1, kbdY + gpY));
+
+        sailor.vx = combinedX * CONFIG.SAILOR_SPEED;
+        sailor.vy = combinedY * CONFIG.SAILOR_SPEED;
+
+        if (combinedX < 0) sailor.facingLeft = true;
+        if (combinedX > 0) sailor.facingLeft = false;
+
+        if (combinedX !== 0 || combinedY !== 0) {
+          sailor.isMoving = true;
+        }
+      }
+    }
 
     sailor.x += sailor.vx * dt;
     sailor.y += sailor.vy * dt;
