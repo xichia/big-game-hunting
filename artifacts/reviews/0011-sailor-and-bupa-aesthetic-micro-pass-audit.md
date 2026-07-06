@@ -1,43 +1,29 @@
 # Sailor and Bupa Aesthetic Micro-Pass Audit
 
-**Verdict:** AESTHETIC_MICRO_PASS_SCOPE_CLEAN
+## Verdict
+**AESTHETIC_MICRO_PASS_READY_FOR_PLAYTEST**
 
 ## Summary of Changes
-Sonnet applied the requested visual polish to `prototypes/sailor-and-bupa-go-to-the-beach/index.html`. The changes consist of drawing Sailor slightly smaller visually, redesigning the shoreline foam to be blocky and broken, and applying warmer/deeper palettes to the environment (sand, water, grass, dunes).
+Fable implemented a visual micro-pass to refine the aesthetics of the Sailor and Bupa prototype without altering gameplay mechanics. The changes include:
+- Scaling down the Sailor sprite (from `0.84` to `0.74`) and adjusting pigtail positioning to maintain readability.
+- Refining sand and dune textures with sparse clusters and deterministic shell imprints.
+- Updating the shoreline foam pattern to match the water's interior details, creating a more cohesive visual language.
+- Nudging the color palette for water, tidepools, and vegetation slightly towards more saturated, vivid tones.
+- Updating the README to reflect these visual updates.
 
-## Whether the Changes are Aesthetic-Only
-Yes. All changes occurred exclusively inside the draw routines and color constants. There were no logic, behavior, or configuration alterations.
-
-## Sailor Scale/Collision Review
-Sailor's visual scale was reduced via a new constant `SAILOR_DRAW_SCALE = 0.84`. This is applied purely through `ctx.scale()` during `drawSailor()` and scaling her drop shadow. Sailor's `width` and `height` properties, which control collision, movement speed, camera tracking, and collection radius, remain completely unchanged.
-
-## Waterline/Tide-Scope Review
-The shoreline foam generation function (`drawShoreFoam`) was rewritten to draw scattered, broken blocks of white and light blue instead of a continuous wavy band. The `boundaryX` coordinate passed into the function is static. There is no moving tide, wet sand, new hazards, or gameplay/mechanic implications from this change.
-
-## Palette-Change Review
-Environment colors were shifted to be warmer and more vibrant:
-- Sand: `#e8d9ae` -> `#f0d29c`, speckles `#d3bd8c` -> `#c9a873`
-- Water: `#5b9db3` -> `#3c8aa3`
-- Dunes: `#d4c090` -> `#d9bb82`
-- Grass/Tidepool tones were similarly adjusted.
-All modifications are purely hex color code replacements with no functional impact.
-
-## Input/Controller Review
-Untouched. Keyboard and controller input logic was not modified.
-
-## Bupa/Shell/Camera/Update Review
-- Bupa pathfinding, personality states, and interaction timers are untouched.
-- Shell collection, scoring, spawning, and sparkles are untouched.
-- The `update()` loop, scrolling, and camera tracking remain exactly as they were.
-
-## README Accuracy
-The `README.md` was completely untouched and remains accurate regarding the state of the prototype (no mechanics, non-interactive critters, decorative water). 
-
-## Scratch/Untracked-File Check
-A check of untracked files confirmed no accidental scratch or planning files were added to the repository. The only modified file is `index.html`.
+## Scope Integrity Review
+- **Visual-Only**: The implementation stayed entirely visual-only. No core logic, game loop, or state variables were changed.
+- **Sailor Scale/Collision**: `SAILOR_DRAW_SCALE` was updated inside `drawSailor()`, which is used strictly for rendering. Physics, collision (`sailor.width`/`sailor.height`), and collection radii are unchanged.
+- **Pigtail Compensation**: Pigtail offsets in `drawSailor()` were adjusted outward by exactly 2px to counteract the sprite downscale, strictly preserving the cosmetic head-to-pigtail gap.
+- **Sand Texture Determinism**: Changes to `SAND_SPECKLES` and `DUNE_SPECKLES` are array constant updates. They are purely deterministic and remain static without per-frame random noise.
+- **Shell-Adjacent Marks**: Added as purely visual elements within `drawShell()`. They only render if the shell is uncollected, using a deterministic formula based on shell coordinates. Shell spawning, scoring, and sparkle logic remain unaffected.
+- **Waterline/Fixed-Boundary**: The waterline boundary remains rigidly fixed at `X=150`. No moving tide, hazard mechanics, or wet-sand bands were introduced. `drawShoreFoam` now simply renders foam dots deterministically along the existing fixed boundary.
+- **Palette Scope**: Color changes were strictly applied to water, grass, dune plants, and shell sand marks. Interactive elements, HUD, Sailor, Bupa, and mechanics-related colors remain untouched.
+- **README Accuracy**: The README precisely reflects the visual nature of the changes, detailing the scale adjustment, restrained sand grain, foam DNA sharing, and palette tweaks, without overclaiming or misrepresenting mechanics.
+- **File Touches**: Only `prototypes/sailor-and-bupa-go-to-the-beach/index.html` and `README.md` were modified. No source-of-truth, `trail-of-embers`, or extraneous files were edited. No scratch files remain in the working tree.
 
 ## Required Fixes
-None.
+None. The implementation perfectly matches the requested aesthetic constraints.
 
 ## Next Steps
-Ian should visually inspect/playtest now to confirm the warmer colors, the broken foam style, and Sailor's smaller visual presence feel right.
+Ian should proceed to playtest the latest visual pass.
