@@ -50,9 +50,10 @@
 </head>
 <body>
   <div id="hud">
-    <span><span class="key">Arrows/WASD</span> move &nbsp; <span class="key">Space</span> ember &nbsp; <span class="key">R</span> retry level &nbsp; <span class="key">N</span> next (after win) &nbsp; <span class="key">Shift+R</span> level 1 &nbsp; <span class="key">G</span> debug</span>
+    <span><span class="key">Arrows/WASD</span> move &nbsp; <span class="key">Space</span> ember &nbsp; <span class="key">R</span> retry &nbsp; <span class="key">N</span> next &nbsp; <span class="key">M</span> mute &nbsp; <span class="key">G</span> debug</span>
     <span id="level-status"></span>
     <span id="cache-status"></span>
+    <span id="audio-status">sound: on</span>
     <span id="ember-status">ember: ready</span>
   </div>
   <div style="position: relative;">
@@ -551,6 +552,7 @@ loadLevel(0);
 // ---- input -------------------------------------------------------
 const keys = new Set();
 window.addEventListener("keydown", (e) => {
+  if (typeof initAudio === "function") initAudio();
   keys.add(e.key.toLowerCase());
   if (e.key === " ") e.preventDefault(); // stop page scroll
   if (e.key.toLowerCase() === "r") {
@@ -561,6 +563,9 @@ window.addEventListener("keydown", (e) => {
     loadLevel(levelIndex + 1);
   }
   if (e.key.toLowerCase() === "g") debugView = !debugView;
+  if (e.key.toLowerCase() === "m") {
+    if (typeof toggleMute === "function") toggleMute();
+  }
 
   if (/^[1-9]$/.test(e.key)) {
     const num = parseInt(e.key, 10);
@@ -587,6 +592,152 @@ function moveToward(entity, target, speed, dtSec) {
   const step = Math.min(speed * dtSec, d);
   entity.x += (dx / d) * step;
   entity.y += (dy / d) * step;
+}
+
+// ---- audio -------------------------------------------------------
+let audioCtx = null;
+let masterGain = null;
+let isMuted = false;
+
+let proximityOsc = null;
+let proximityLfo = null;
+let proximityLfoGain = null;
+let proximityGain = null;
+
+function initAudio() {
+  if (audioCtx) {
+    if (audioCtx.state === "suspended") {
+      audioCtx.resume();
+    }
+    return;
+  }
+  try {
+    const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+    if (!AudioContextClass) return;
+    audioCtx = new AudioContextClass();
+
+    masterGain = audioCtx.createGain();
+    masterGain.gain.setValueAtTime(isMuted ? 0 : 1, audioCtx.currentTime);
+    masterGain.connect(audioCtx.destination);
+
+    proximityOsc = audioCtx.createOscillator();
+    proximityOsc.type = "sine";
+    proximityOsc.frequency.setValueAtTime(110, audioCtx.currentTime);
+
+    proximityLfo = audioCtx.createOscillator();
+    proximityLfo.type = "sine";
+    proximityLfo.frequency.setValueAtTime(1, audioCtx.currentTime);
+
+    proximityLfoGain = audioCtx.createGain();
+    proximityLfoGain.gain.setValueAtTime(0, audioCtx.currentTime);
+
+    proximityGain = audioCtx.createGain();
+    proximityGain.gain.setValueAtTime(0, audioCtx.currentTime);
+
+    proximityLfo.connect(proximityLfoGain);
+    proximityLfoGain.connect(proximityGain.gain);
+
+    proximityOsc.connect(proximityGain);
+    proximityGain.connect(masterGain);
+
+    proximityOsc.start();
+    proximityLfo.start();
+  } catch (e) {
+    audioCtx = null;
+  }
+}
+
+function toggleMute() {
+  isMuted = !isMuted;
+  const audioStatusEl = document.getElementById("audio-status");
+  if (audioStatusEl) {
+    audioStatusEl.textContent = isMuted ? "sound: muted" : "sound: on";
+  }
+  if (masterGain && audioCtx) {
+    masterGain.gain.setValueAtTime(isMuted ? 0 : 1, audioCtx.currentTime);
+  }
+}
+
+function updateProximityAudio(distToBeast) {
+  if (!audioCtx || isMuted || gameOver) {
+    if (proximityGain && audioCtx) {
+      proximityGain.gain.setTargetAtTime(0, audioCtx.currentTime, 0.1);
+    }
+    return;
+  }
+
+  const maxDistance = 350;
+  if (distToBeast > maxDistance) {
+    if (proximityGain && audioCtx) {
+      proximityGain.gain.setTargetAtTime(0, audioCtx.currentTime, 0.1);
+    }
+    return;
+  }
+
+  const norm = 1 - (distToBeast / maxDistance); // 0 to 1
+  const targetGain = norm * 0.25;
+  proximityGain.gain.setTargetAtTime(targetGain, audioCtx.currentTime, 0.15);
+  proximityLfoGain.gain.setTargetAtTime(targetGain * 0.4, audioCtx.currentTime, 0.15);
+
+  const targetLfoFreq = 1 + norm * 7;
+  proximityLfo.frequency.setTargetAtTime(targetLfoFreq, audioCtx.currentTime, 0.15);
+}
+
+function playEmberTick() {
+  if (!audioCtx || isMuted || gameOver) return;
+  try {
+    const osc = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+    osc.type = "sine";
+    osc.frequency.setValueAtTime(800, audioCtx.currentTime);
+    osc.frequency.exponentialRampToValueAtTime(100, audioCtx.currentTime + 0.05);
+
+    gain.gain.setValueAtTime(0.05, audioCtx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.05);
+
+    osc.connect(gain);
+    gain.connect(masterGain);
+    osc.start();
+    osc.stop(audioCtx.currentTime + 0.06);
+  } catch (e) {}
+}
+
+function playWinStinger() {
+  if (!audioCtx || isMuted) return;
+  try {
+    const osc = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+    osc.type = "triangle";
+    osc.frequency.setValueAtTime(220, audioCtx.currentTime);
+    osc.frequency.exponentialRampToValueAtTime(880, audioCtx.currentTime + 0.4);
+
+    gain.gain.setValueAtTime(0.15, audioCtx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.4);
+
+    osc.connect(gain);
+    gain.connect(masterGain);
+    osc.start();
+    osc.stop(audioCtx.currentTime + 0.45);
+  } catch (e) {}
+}
+
+function playLossStinger() {
+  if (!audioCtx || isMuted) return;
+  try {
+    const osc = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+    osc.type = "sawtooth";
+    osc.frequency.setValueAtTime(150, audioCtx.currentTime);
+    osc.frequency.linearRampToValueAtTime(30, audioCtx.currentTime + 0.5);
+
+    gain.gain.setValueAtTime(0.2, audioCtx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.5);
+
+    osc.connect(gain);
+    gain.connect(masterGain);
+    osc.start();
+    osc.stop(audioCtx.currentTime + 0.55);
+  } catch (e) {}
 }
 
 // ---- update -------------------------------------------------------
@@ -664,6 +815,7 @@ function tryDropEmber() {
     lastEmberDropAt = elapsedMs;
     embers.push({ x: player.x, y: player.y, droppedAt: elapsedMs });
     emberDroppedThisFrame = true;
+    if (typeof playEmberTick === "function") playEmberTick();
   } else if (hasCinderCharge) {
     // Spend the stored charge to drop immediately, mid-cooldown.
     // Do NOT change lastEmberDropAt, do NOT restart, extend, or reset the normal cooldown.
@@ -671,6 +823,7 @@ function tryDropEmber() {
     lastChargeSpentAt = elapsedMs;
     embers.push({ x: player.x, y: player.y, droppedAt: elapsedMs, fromCharge: true });
     emberDroppedThisFrame = true;
+    if (typeof playEmberTick === "function") playEmberTick();
   }
 }
 
@@ -698,12 +851,14 @@ function updateBeast(dtSec) {
 
 function checkWinLose() {
   if (dist(player, level.safeZone) < level.safeZone.r + PLAYER_RADIUS) {
+    if (!gameOver && typeof playWinStinger === "function") playWinStinger();
     gameOver = "won";
     overlayMsgEl.style.color = "#8fe38f";
     overlayMsgEl.textContent = levelIndex < LEVELS.length - 1
       ? "YOU REACHED SAFETY — press N for the next level"
       : `ALL ${LEVELS.length} LEVELS CLEAR — press Shift+R to start over`;
   } else if (dist(player, beast) < PLAYER_RADIUS + BEAST_RADIUS) {
+    if (!gameOver && typeof playLossStinger === "function") playLossStinger();
     gameOver = "lost";
     overlayMsgEl.style.color = "#e37d7d";
     overlayMsgEl.textContent = "THE BEAST CAUGHT YOU — press R to restart";
@@ -1057,6 +1212,14 @@ function drawDebug() {
 
 function updateGamepadInput(gp) {
   if (gp && gp.buttons) {
+    if (typeof initAudio === "function") {
+      for (let i = 0; i < gp.buttons.length; i++) {
+        if (gp.buttons[i] && gp.buttons[i].pressed) {
+          initAudio();
+          break;
+        }
+      }
+    }
     // Check restart button (Button 9)
     if (gp.buttons.length > 9 && gp.buttons[9]) {
       const button9Down = gp.buttons[9].pressed;
@@ -1104,6 +1267,13 @@ function frame(ts) {
     updatePlayer(dtSec, gp);
     updateBeast(dtSec);
     checkWinLose();
+    if (typeof updateProximityAudio === "function") {
+      updateProximityAudio(dist(player, beast));
+    }
+  } else {
+    if (typeof updateProximityAudio === "function") {
+      updateProximityAudio(Infinity);
+    }
   }
 
   drawWorld();

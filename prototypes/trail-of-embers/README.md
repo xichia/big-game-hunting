@@ -2,7 +2,7 @@
 
 ARTIFACT TYPE: Probe (playable prototype)
 AUTHORITY: PROBE
-STATUS: Draft — Cinder Cache pass, Revision 3 (cache now grants a stored, spend-later Cinder Charge instead of an immediate effect, per Ian's playtest of Revision 2) untested, human-gated
+STATUS: Draft — Audio/Proximity Cue pass (added Web Audio API synthesized proximity rumble, ember tick, win/loss stingers, and mute control) untested, human-gated
 SOURCE-OF-TRUTH FILES TOUCHED: none
 
 This is the playable build for the probe defined in
@@ -38,6 +38,7 @@ open prototypes/trail-of-embers/index.html
 - **R** — restart the **current level** at any time (including after win/loss)
 - **N** — advance to the next level (only after winning the current one)
 - **Shift+R** — full reset back to level 1
+- **M** — toggle mute (toggles the audio engine mute state)
 - **G** — toggle debug view (shows torch/ember radii and the beast's current AI state + target line)
 - **Esc / quit** — not implemented; just close the browser tab (there is no launch menu to exit from)
 
@@ -207,6 +208,14 @@ speed and ember tuning, and — only on level 7 — Cinder Cache placement).
      Cache draft's longer ember cooldown (3500ms vs. 1500ms everywhere
      else), since a longer cooldown is what makes both a normal drop and a
      spent charge feel consequential; ember lifetime (4000ms) is unchanged.
+
+## What changed in the Audio/Proximity Cue Pass
+
+- **Proximity Rumble** — A non-directional, Web Audio API synthesized rumble (~110 Hz carrier modulated by a dynamic rate LFO) that scales in volume and pulse rate as the beast gets closer to the player.
+- **Ember Click** — A subtle, sub-100ms click triggered on every successful ember drop.
+- **Win/Loss Stingers** — A brief rising triangle sweep on win, and a brief falling sawtooth ramp on loss.
+- **Mute Control & HUD Status** — Added a mute toggle key (`M`) and corresponding HUD text (`sound: on` / `sound: muted`).
+- **Nothing else changed** — Beast AI, collision, level layout, movement speed, cooldown timing, Cinder Charge mechanics, and levels 1–7 remain entirely untouched.
 
 ## What changed in the Cinder Cache pass
 
@@ -417,6 +426,10 @@ make route planning richer (a detour worth weighing, and a resource worth
 banking) without turning into a chore, a required key, or a way to
 trivially out-run the beast.
 
+The Audio/Proximity Cue Pass adds one narrow probe/experiment to this build:
+
+> Does a subtle, non-directional proximity audio cue increase tension and readability without making the beast feel predictable or reducing the fear of darkness?
+
 ## Cinder Cache Pass Playtest
 
 Run level 7, "The Ember Ring," at least 3 times — at least once taking the
@@ -592,8 +605,7 @@ Run the new larger level (5, "The Deep Maze") at least 3 times.
 - No adaptive/learning AI, no new enemy types — the three rules above are
   the entire beast behavior in every level.
 - No randomness anywhere.
-- No proximity audio / growl cue — still omitted; the brief marks audio as
-  optional and non-essential to the light/AI mechanic itself.
+- No production audio or growl sound files — the Web Audio API synthesized proximity rumble, ember tick, and win/loss stingers in this pass are a probe/experiment, not a ratified audio direction.
 - No menus beyond the level prompts and restart keys.
 - No save system — progress resets when the tab closes.
 - No inventory, upgrades, story, or campaign structure — "levels" here are
