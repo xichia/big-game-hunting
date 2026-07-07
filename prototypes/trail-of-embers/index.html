@@ -50,7 +50,7 @@
 </head>
 <body>
   <div id="hud">
-    <span><span class="key">Arrows/WASD</span> move &nbsp; <span class="key">Space</span> ember &nbsp; <span class="key">R</span> retry &nbsp; <span class="key">N</span> next &nbsp; <span class="key">M</span> mute &nbsp; <span class="key">G</span> debug</span>
+    <span><span class="key">Arrows/WASD</span> move &nbsp; <span class="key">Space</span> ember &nbsp; <span class="key">R</span> retry &nbsp; <span class="key">N</span> next &nbsp; <span class="key">M</span> mute<span id="debug-hint">&nbsp; <span class="key">G</span> debug</span></span>
     <span id="level-status"></span>
     <span id="cache-status"></span>
     <span id="audio-status">sound: on</span>
@@ -530,6 +530,11 @@ const overlayMsgEl = document.getElementById("overlay-msg");
 const hudEl = document.getElementById("hud");
 
 let debugView = false;
+const playtestMode = typeof URLSearchParams !== "undefined" && new URLSearchParams(window.location.search).has("playtest");
+if (playtestMode) {
+  const debugHint = document.getElementById("debug-hint");
+  if (debugHint) debugHint.style.display = "none";
+}
 let gameOver = false; // "won" | "lost" | false
 let lastEmberDropAt = -Infinity;
 let lastCachePickupAt = -Infinity;  // drives the "cinder charge ready" HUD message
@@ -597,7 +602,7 @@ window.addEventListener("keydown", (e) => {
   if (e.key.toLowerCase() === "n" && gameOver === "won" && levelIndex < LEVELS.length - 1) {
     loadLevel(levelIndex + 1);
   }
-  if (e.key.toLowerCase() === "g") debugView = !debugView;
+  if (e.key.toLowerCase() === "g" && !playtestMode) debugView = !debugView;
   if (e.key.toLowerCase() === "m") {
     if (typeof toggleMute === "function") toggleMute();
   }
