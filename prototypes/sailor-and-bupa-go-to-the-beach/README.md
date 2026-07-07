@@ -24,14 +24,18 @@ open prototypes/sailor-and-bupa-go-to-the-beach/index.html
 * **Readable Tells & Custom Performances**:
   - Bupa cycles through three postures during every pause (first 40% sniffing, next 40% custom investigation performance, final 20% alert and tail-wagging).
   - During the middle 40% investigation stage, Bupa has a custom performance per interest point type:
-    - **Tidepool**: Bupa crouches and bats/paws at the water.
+    - **Beach Ball**: Bupa crouches and bats/paws at the ball (retargeted batting beat).
+    - **Umbrella**: Bupa sits in the umbrella's shade and slow-blinks (a "cat found a shade patch" beat).
     - **Driftwood**: Bupa stretches forward and scratches/rubs claws against the log.
     - **Rock Pile**: Bupa sits and bobs his head (nosing/sniffing).
+    - **Tidepool** (occasional): Bupa crouches and bats/paws at the water. Tidepools are now an occasional ocean-adjacent feature rather than the default common POI.
     - **Default (Grass/Tuft)**: Bupa crouches low and sniffs/peeks.
   - Interest-point type controls the total pause duration:
     - Rock: short pause (2–4s)
     - Driftwood: medium pause (4.5–6.5s)
-    - Tidepool: long pause (8–11s)
+    - Beach Ball: medium pause (4–6s)
+    - Umbrella: medium-long pause (5–7.5s)
+    - Tidepool: long pause (8–11s, occasional only)
 * **Proximity, Check-Back, & Affection**:
   - If Sailor moves too far from Bupa while he is trotting, he stops, sits, looks back, and meows until Sailor returns close to him.
   - **Reunion Mrrp**: When Sailor returns to reassure Bupa after a check-back meow, Bupa flashes a happy meow chip saying "mrrp!".
