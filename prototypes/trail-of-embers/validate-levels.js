@@ -87,6 +87,52 @@ function bfsReachable(level, target, targetR, gateClosed = false) {
   return false;
 }
 
+// Directed BFS that respects one-way passages: a passage only blocks movement
+// in the direction opposite to its allowed direction. `treatPassagesAsWalls`
+// makes every passage a solid obstacle (used to verify the no-passage route).
+function directedBfsReachable(level, target, targetR, treatPassagesAsWalls = false) {
+  const passages = level.oneWayPassages || [];
+  const step = 5;
+  const cols = Math.floor(level.fieldW / step), rows = Math.floor(level.fieldH / step);
+  const gateBlocks = (level.gate) ? [level.gate] : [];
+  const wallPassages = treatPassagesAsWalls ? passages : [];
+  const obstaclesToUse = level.obstacles.concat(gateBlocks).concat(wallPassages);
+  const blocked = (x, y) =>
+    x < PLAYER_RADIUS || y < PLAYER_RADIUS ||
+    x > level.fieldW - PLAYER_RADIUS || y > level.fieldH - PLAYER_RADIUS ||
+    obstaclesToUse.some(o => circleRectCollide(x, y, PLAYER_RADIUS, o));
+  const inAnyPassage = (x, y) => passages.find(p => circleRectCollide(x, y, PLAYER_RADIUS, p));
+  const key = (cx, cy) => cy * cols + cx;
+  const start = [Math.round(level.playerStart.x / step), Math.round(level.playerStart.y / step)];
+  const seen = new Uint8Array(cols * rows);
+  const queue = [start];
+  seen[key(...start)] = 1;
+  while (queue.length) {
+    const [cx, cy] = queue.shift();
+    const x = cx * step, y = cy * step;
+    if (Math.hypot(x - target.x, y - target.y) < targetR + PLAYER_RADIUS) return true;
+    for (const [dx, dy] of [[1,0],[-1,0],[0,1],[0,-1]]) {
+      const nx = cx + dx, ny = cy + dy;
+      if (nx < 0 || ny < 0 || nx >= cols || ny >= rows) continue;
+      if (seen[key(nx, ny)]) continue;
+      const nxPos = nx * step, nyPos = ny * step;
+      if (blocked(nxPos, nyPos)) continue;
+      const p = inAnyPassage(x, y) || inAnyPassage(nxPos, nyPos);
+      if (p) {
+        const against =
+          (p.direction === "right" && dx < 0) ||
+          (p.direction === "left" && dx > 0) ||
+          (p.direction === "up" && dy > 0) ||
+          (p.direction === "down" && dy < 0);
+        if (against) continue;
+      }
+      seen[key(nx, ny)] = 1;
+      queue.push([nx, ny]);
+    }
+  }
+  return false;
+}
+
 // BFS to verify if the player can reach/overlap a specific target rectangle
 function bfsReachableToRect(level, rect, gateClosed = true) {
   const step = 5;
@@ -135,12 +181,24 @@ LEVELS.forEach((raw, i) => {
     "safe zone clear of obstacles");
   check(level.beastSpeed < 175, `beast (${level.beastSpeed}) slower than player (175)`);
   
+  // Optional one-way passages (Level 9 probe)
+  (level.oneWayPassages || []).forEach((p, pi) => {
+    const rectInBounds = r => r.x >= 0 && r.y >= 0 && r.x + r.w <= level.fieldW && r.y + r.h <= level.fieldH;
+    check(rectInBounds(p), `one-way passage ${pi + 1} in bounds`);
+    check(["up", "down", "left", "right"].includes(p.direction), `one-way passage ${pi + 1} has valid direction`);
+    check(p.w >= 20 && p.h >= 20, `one-way passage ${pi + 1} is wide/tall enough for the player`);
+    const overlapsObstacle = level.obstacles.some(o =>
+      !(p.x + p.w <= o.x || o.x + o.w <= p.x || p.y + p.h <= o.y || o.y + o.h <= p.y)
+    );
+    check(!overlapsObstacle, `one-way passage ${pi + 1} does not overlap obstacles`);
+  });
+
   if (level.gate) {
     check(inBounds(level.gate) && inBounds({ x: level.gate.x + level.gate.w, y: level.gate.y + level.gate.h }),
       "gate in bounds");
     check(level.triggerZone && inBounds(level.triggerZone) && inBounds({ x: level.triggerZone.x + level.triggerZone.w, y: level.triggerZone.y + level.triggerZone.h }),
       "trigger zone in bounds");
-    
+
     const gateOverlapsObstacles = level.obstacles.some(o => {
       return !(level.gate.x + level.gate.w <= o.x ||
                o.x + o.w <= level.gate.x ||
@@ -148,15 +206,20 @@ LEVELS.forEach((raw, i) => {
                o.y + o.h <= level.gate.y);
     });
     check(!gateOverlapsObstacles, "gate not overlapping obstacles");
-    
+
     const tzReachable = bfsReachableToRect(level, level.triggerZone);
     check(tzReachable, "trigger zone reachable by player (BFS, player-radius clearance)");
-    
+
     const closedReachable = bfsReachable(level, level.safeZone, level.safeZone.r, true);
     check(!closedReachable, "gate closed: safe zone not reachable");
-    
+
     const openReachable = bfsReachable(level, level.safeZone, level.safeZone.r, false);
     check(openReachable, "gate open: safe zone reachable");
+  } else if (level.oneWayPassages && level.oneWayPassages.length) {
+    const directedReachable = directedBfsReachable(level, level.safeZone, level.safeZone.r, false);
+    check(directedReachable, "safe zone reachable with one-way rules (directed BFS)");
+    const noPassageReachable = directedBfsReachable(level, level.safeZone, level.safeZone.r, true);
+    check(noPassageReachable, "safe zone reachable without using one-way passages (passages as walls)");
   } else {
     check(bfsReachable(level, level.safeZone, level.safeZone.r),
       "safe zone reachable from player start (BFS, player-radius clearance)");

@@ -507,6 +507,64 @@ const LEVELS = [
       { x: 1650, y: 0,   w: 24,   h: 150 }
     ],
   },
+  {
+    name: "The Crossroads",
+    // One-way passages as a learnable wrong-turn lesson. The player reaches a
+    // clear crossroads: left is the correct route to the safe zone, right is
+    // a tempting one-way passage that sends them on a loop back to the same
+    // decision point. Low-stakes: the beast creates mild pressure but the
+    // loop is not lethal.
+    fieldW: 1800,
+    fieldH: 1000,
+    playerStart: { x: 900, y: 900 },
+    beastStart: { x: 1600, y: 150 },
+    safeZone: { x: 100, y: 100, r: 28 },
+    beastSpeed: 140,  // slower for low-stakes lesson
+    emberCooldownMs: 1500,
+    emberLifetimeMs: 4000,
+    oneWayPassages: [
+      // The tempting wrong-turn: rightward passage in the right wall
+      { x: 1100, y: 440, w: 24, h: 120, direction: "right" },
+      // The return-loop enforcer: leftward passage in the upper-left wall
+      { x: 400, y: 200, w: 24, h: 100, direction: "left" },
+    ],
+    obstacles: [
+      // Central vertical wall with crossroads gap
+      { x: 700, y: 300, w: 24, h: 140 },   // upper segment (y=300 to 440)
+      { x: 700, y: 560, w: 24, h: 440 },   // lower segment (y=560 to 1000)
+      // Gap at y=440-560 is the crossroads opening
+
+      // Right wall with one-way passage (the tempting route)
+      { x: 1100, y: 300, w: 24, h: 140 },  // upper segment (y=300 to 440)
+      { x: 1100, y: 560, w: 24, h: 440 },  // lower segment (y=560 to 1000)
+      // Gap at y=440-560 is the one-way passage
+
+      // Upper-left wall with return-loop passage
+      { x: 400, y: 0, w: 24, h: 200 },     // upper segment (y=0 to 200)
+      { x: 400, y: 300, w: 24, h: 260 },   // lower segment (y=300 to 560)
+      // Gap at y=200-300 is the return one-way passage
+
+      // Top boundary wall
+      { x: 0, y: 0, w: 1800, h: 24 },
+
+      // Bottom boundary wall
+      { x: 0, y: 976, w: 1800, h: 24 },
+
+      // Left boundary wall
+      { x: 0, y: 0, w: 24, h: 1000 },
+
+      // Right boundary wall
+      { x: 1776, y: 0, w: 24, h: 1000 },
+
+      // Loop corridor structure (upper area)
+      // This creates the loop that the wrong-turn player must traverse
+      { x: 1400, y: 300, w: 24, h: 400 },  // right inner wall
+
+      // Additional structure to make the crossroads readable
+      { x: 200, y: 400, w: 200, h: 24 },   // left horizontal baffle
+      { x: 200, y: 600, w: 200, h: 24 },   // left horizontal baffle 2
+    ],
+  },
 ];
 
 function isGateOpen() {
@@ -567,7 +625,10 @@ function loadLevel(i) {
 }
 
 function resetGame() {
-  player = { x: level.playerStart.x, y: level.playerStart.y, facing: 1 }; // facing is cosmetic only
+  player = {
+    x: level.playerStart.x, y: level.playerStart.y, facing: 1,
+    prevX: level.playerStart.x, prevY: level.playerStart.y,
+  }; // facing is cosmetic only; prevX/Y track movement direction for one-way passages
   beast = {
     x: level.beastStart.x, y: level.beastStart.y,
     state: "idle",             // idle | patrol | chase-ember | chase-torch
@@ -810,6 +871,8 @@ function updatePlayer(dtSec, gp) {
   else if (dx > 0) player.facing = 1;
 
   if (dx !== 0 || dy !== 0) {
+    const savedX = player.x;
+    const savedY = player.y;
     const len = Math.hypot(dx, dy);
     const nx = player.x + (dx / len) * PLAYER_SPEED * dtSec;
     const ny = player.y + (dy / len) * PLAYER_SPEED * dtSec;
@@ -817,13 +880,66 @@ function updatePlayer(dtSec, gp) {
     // Resolve each axis independently against obstacles so sliding along a
     // wall works instead of fully blocking diagonal movement.
     const gateBlocks = (level.gate && !isGateOpen()) ? [level.gate] : [];
-    const obstaclesAndGate = level.obstacles.concat(gateBlocks);
+
+    // One-way passages: if the player is trying to move against a passage's
+    // allowed direction, treat that passage as a solid wall for this frame.
+    const moveDX = nx - player.x;
+    const moveDY = ny - player.y;
+    const passageBlocks = [];
+    for (const p of (level.oneWayPassages || [])) {
+      const against =
+        (p.direction === "right" && moveDX < 0) ||
+        (p.direction === "left" && moveDX > 0) ||
+        (p.direction === "up" && moveDY > 0) ||
+        (p.direction === "down" && moveDY < 0);
+      if (against) passageBlocks.push(p);
+    }
+
+    const obstaclesAndGate = level.obstacles.concat(gateBlocks).concat(passageBlocks);
     const blockedX = obstaclesAndGate.some(o => circleRectCollide(nx, player.y, PLAYER_RADIUS, o));
     const blockedY = obstaclesAndGate.some(o => circleRectCollide(player.x, ny, PLAYER_RADIUS, o));
     if (!blockedX) player.x = nx;
     if (!blockedY) player.y = ny;
+
+    // Sweep-based crossing check: axis-independent resolution can miss the
+    // case where the player slides diagonally around a one-way passage edge
+    // and crosses it in the wrong direction. Clamp if a wrong-direction
+    // crossing occurred.
+    for (const p of (level.oneWayPassages || [])) {
+      if (p.direction === "right" || p.direction === "left") {
+        if (player.y + PLAYER_RADIUS > p.y && player.y - PLAYER_RADIUS < p.y + p.h) {
+          if (p.direction === "right") {
+            if (savedX >= p.x + p.w && player.x < p.x + p.w) {
+              player.x = p.x + p.w + PLAYER_RADIUS;
+            }
+          } else { // "left"
+            if (savedX <= p.x && player.x > p.x) {
+              player.x = p.x - PLAYER_RADIUS;
+            }
+          }
+        }
+      } else if (p.direction === "up" || p.direction === "down") {
+        if (player.x + PLAYER_RADIUS > p.x && player.x - PLAYER_RADIUS < p.x + p.w) {
+          if (p.direction === "down") {
+            if (savedY >= p.y + p.h && player.y < p.y + p.h) {
+              player.y = p.y + p.h + PLAYER_RADIUS;
+            }
+          } else { // "up"
+            if (savedY <= p.y && player.y > p.y) {
+              player.y = p.y - PLAYER_RADIUS;
+            }
+          }
+        }
+      }
+    }
+
     player.x = Math.max(PLAYER_RADIUS, Math.min(level.fieldW - PLAYER_RADIUS, player.x));
     player.y = Math.max(PLAYER_RADIUS, Math.min(level.fieldH - PLAYER_RADIUS, player.y));
+
+    // Store the resolved position so next frame can determine movement
+    // direction relative to one-way passages.
+    player.prevX = player.x;
+    player.prevY = player.y;
   }
 
   // Cinder Cache pickup: touching one removes it (it never reappears this
@@ -1086,6 +1202,71 @@ function drawStoneCircle() {
   }
 }
 
+function drawOneWayPassages() {
+  if (!level.oneWayPassages) return;
+  for (const p of level.oneWayPassages) {
+    // subtle worn-floor marking so the passage reads as environmental
+    ctx.fillStyle = "rgba(70, 62, 50, 0.5)";
+    ctx.fillRect(p.x, p.y, p.w, p.h);
+
+    // chevron/arrow markings pointing the allowed direction, blocky and
+    // snapped to the shared PX lattice so they stay readable in torch light
+    ctx.fillStyle = "#9a8a70";
+    const arrowSize = PX * 6; // 18px canvas units
+    const spacing = arrowSize * 3;
+
+    if (p.direction === "right" || p.direction === "left") {
+      // drawBlockArrow's chevron tip points opposite its dx/dy sign.
+      const arrowDX = p.direction === "right" ? -arrowSize : arrowSize;
+      const count = Math.max(1, Math.floor(p.h / spacing));
+      const startY = p.y + (p.h - (count - 1) * spacing) / 2;
+      const cx = p.x + p.w / 2;
+      for (let i = 0; i < count; i++) {
+        const cy = startY + i * spacing;
+        drawBlockArrow(cx, cy, arrowDX, 0, arrowSize);
+      }
+    } else {
+      const arrowDY = p.direction === "up" ? arrowSize : -arrowSize;
+      const count = Math.max(1, Math.floor(p.w / spacing));
+      const startX = p.x + (p.w - (count - 1) * spacing) / 2;
+      const cy = p.y + p.h / 2;
+      for (let i = 0; i < count; i++) {
+        const cx = startX + i * spacing;
+        drawBlockArrow(cx, cy, 0, arrowDY, arrowSize);
+      }
+    }
+  }
+}
+
+function drawBlockArrow(cx, cy, dx, dy, size) {
+  // pixel-art chevron: a blocky > or v made from small rects
+  const s = Math.sign(dx || dy) * size;
+  const step = PX;
+  if (dx !== 0) {
+    // horizontal arrow
+    for (let i = 0; i < size / step; i++) {
+      const x = cx - s * 0.5 + i * step * Math.sign(dx);
+      const y1 = cy - i * step;
+      const y2 = cy + i * step;
+      ctx.fillRect(x, y1, step, step);
+      ctx.fillRect(x, y2, step, step);
+    }
+    const tipX = dx > 0 ? cx + s * 0.5 - step : cx + s * 0.5;
+    ctx.fillRect(tipX, cy - step / 2, step, step);
+  } else {
+    // vertical arrow
+    for (let i = 0; i < size / step; i++) {
+      const y = cy - s * 0.5 + i * step * Math.sign(dy);
+      const x1 = cx - i * step;
+      const x2 = cx + i * step;
+      ctx.fillRect(x1, y, step, step);
+      ctx.fillRect(x2, y, step, step);
+    }
+    const tipY = dy > 0 ? cy + s * 0.5 - step : cy + s * 0.5;
+    ctx.fillRect(cx - step / 2, tipY, step, step);
+  }
+}
+
 function drawGate(g, isOpen) {
   ctx.save();
   if (isOpen) {
@@ -1143,6 +1324,9 @@ function drawWorld() {
 
   // walls as brick masonry
   for (const o of level.obstacles) drawBricks(o);
+
+  // one-way passages (diegetic arrow-marked floor)
+  drawOneWayPassages();
 
   // gate
   if (level.gate) {
