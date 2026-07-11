@@ -55,6 +55,30 @@ A visual-simplification pass was applied on top of the earlier visual-cohesion p
 * Ambient decorative crabs (red/orange, clawed) rarely emerge from the sand near rocks or the waterline, scuttle horizontally, and burrow back down, leaving a small sand pile.
 * All game-world drawing routes through the shared half-resolution pixel buffer, upscaled with nearest-neighbor scaling.
 
+### Palette-and-shading pass (visual redesign, slice 1)
+
+Based on `artifacts/research/sailor-and-bupa-visual-redesign-direction-brief.md` (Direction A, the first cut of Direction C, "Pixel Postcard"). This is a visual-only pass — no mechanics, no Bupa behavior, no object placement, and no new object types changed.
+
+* **Warmer, narrower palette.** Sand, dune, water, wood, stone, grass, Sailor's hair/outfit, and Bupa's fur now draw from one shared `PALETTE` constant instead of independently-chosen hex values, pulling the whole scene toward one warm "sunny afternoon" family. Bupa's fur shifted from a cool blue-gray to a warm neutral gray; the rock's stone tone shifted from cool gray to warm taupe while staying clearly distinct from Bupa's fur so he still reads as separate from the rock pile when stopped beside it.
+* **Base/shadow/highlight 3-tone treatment**, added via the existing `shadeColor()` helper (previously only used for shells) so every object derives its shadow and highlight from one base hex rather than hand-picked tones:
+  - Sailor: added a crown highlight to her hair and a top highlight to her dress (shadow tones were already present); pigtail shading stays confined to the underside, per the readability rule.
+  - Bupa: added one highlight strip to the top of his head/back across every pose (trotting, check-back, all five investigate performances, and the alert stage). The white chest/paw patch and his eye color are untouched.
+  - Rock: added a highlight band (previously base+shadow only).
+  - Driftwood: added a shadow band (previously base+highlight only).
+  - Tidepool: its existing two-blue-plus-highlight treatment now derives from one shared tidepool hue.
+  - Beach ball: added a subtle lower-rim shadow tone under the existing stripes.
+  - Umbrella: added a highlight near the canopy apex and a highlight sliver on the pole, both clipped to their own shapes so they can't spill outside the silhouette.
+  - Dune grass tufts and the dune plant: added a highlight tip/patch (previously base+shadow only); both grass variants now derive from one shared grass hue instead of two independently-chosen greens.
+* **Readability re-checked, not changed.** Shell colors, the shoreline foam/contrast treatment, and the sand-speckle/dune-speckle density are all unchanged from before this pass — only re-verified against the new, slightly warmer sand and water tones. Shells stay clearly separated from sand by both hue and lightness; the ocean-to-sand contrast is unchanged in structure and remains high.
+* **Small HUD consistency tweak.** The restart-hint chip's border width and corner radius now match the main HUD chip's, so the two player-facing chips share one frame language. The bottom-left debug panel (`Bupa state / dist`) was left as-is since it's a diagnostic overlay, not a player-facing chip.
+* **Explicitly not in this slice** (candidates for a later slice, per the brief): the shoreline dominant-foam-edge rework, authored charm details (footprints, a distant gull), Bupa's pupil color, and Bupa's investigate stop-position-beside-POI change.
+
+### Waterline polish (follow-up, same pass)
+
+A small follow-up after review flagged the waterline as too flat:
+* **Two-value waterline seam.** Added a static light foam edge plus a darker wet-sand band where water meets beach, both tracing the same jagged shoreline contour as the water fill. This is palette/shading only — no tide motion, no new object types, no animation.
+* **Gold shell contrast nudge.** The gold shell color was deepened slightly so it reads more clearly against the sand; no new shell details were added.
+
 ## Out-of-Scope List
 
 The following features are explicitly out-of-scope for this prototype:

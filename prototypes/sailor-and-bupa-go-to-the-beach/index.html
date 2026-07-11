@@ -75,15 +75,17 @@
       border: 1px solid #444;
     }
     .restart-hint {
+      /* Same frame treatment as .hud (border radius, border width/color,
+         background) so the two player-facing chips read as one family. */
       position: absolute;
       bottom: 16px;
       right: 16px;
       background: rgba(26, 28, 30, 0.85);
       padding: 8px 12px;
-      border-radius: 6px;
+      border-radius: 8px;
       font-size: 12px;
       color: #e3a857;
-      border: 1px solid #5a5d60;
+      border: 2px solid #5a5d60;
     }
     /* Overlay for End of Game and Start Screen */
     .overlay {
@@ -281,6 +283,30 @@
   let shellSparkleTimer = 1;
   let isGameOver = false;
 
+  // --- PALETTE (visual redesign direction brief, Direction A slice) ---
+  // A narrow set of warm base hues shared across sand, dune, water, wood,
+  // stone, grass and both characters, so every fill is drawn from one
+  // "sunny afternoon" family instead of independently-chosen hex values.
+  // shadeColor() (below) derives a shadow and highlight tone from each base
+  // at draw time, giving every object the same base/shadow/highlight
+  // 3-tone treatment without inventing per-object hex values.
+  const PALETTE = {
+    sand: '#f3d6a1',
+    sandGrain: '#d1a06b',
+    dune: '#e0bb80',
+    duneGrain: '#bb8f56',
+    water: '#2a92a0',
+    wood: '#8a5c38',
+    stone: '#79705c',
+    grass: '#94c25a',
+    tidepool: '#2695ab',
+    coral: '#e2604f',
+    gold: '#f0bd4a',
+    hair: '#7a4a2a',
+    outfit: '#3a7cb5',
+    bupaFur: '#87847a'
+  };
+
   // Initialize interest point configurations & types
   const INTEREST_POINT_TYPES = [
     { type: 'rock', color: '#7a7d80', label: 'Rock Pile' },
@@ -292,7 +318,7 @@
 
   // Shell colors kept clear of the dry-sand tone (#f0e3c5) so shells stay
   // visible at a glance instead of blending into the ground.
-  const SHELL_COLORS = ['#e8a9a0', '#c9b8d9', '#fdf7ec', '#f2c14e', '#8fb9c9'];
+  const SHELL_COLORS = ['#e8a9a0', '#c9b8d9', '#fdf7ec', '#e8a028', '#8fb9c9'];
 
   function generateLevel() {
     interestPoints = [];
@@ -868,11 +894,62 @@
   // The shoreline profile's weighted offset is zero, keeping X=150 as its
   // exact average without assembling the water from horizontal strips.
   function drawOcean(boundaryX, yTop, yBottom) {
-    drawProfiledSide(SHORELINE_PROFILE, boundaryX, yTop, yBottom, 'left', '#2b96b7');
+    drawProfiledSide(SHORELINE_PROFILE, boundaryX, yTop, yBottom, 'left', PALETTE.water);
   }
 
   function drawDunes(boundaryX, yTop, yBottom) {
-    drawProfiledSide(DUNE_EDGE_PROFILE, boundaryX, yTop, yBottom, 'right', '#d9bb82');
+    drawProfiledSide(DUNE_EDGE_PROFILE, boundaryX, yTop, yBottom, 'right', PALETTE.dune);
+  }
+
+  // One stepped edge of a shoreline band, offset horizontally from the
+  // profile's boundary by `delta`. Reused by drawProfiledBand below to
+  // build both sides of a band from the same jagged contour.
+  function buildSteppedEdge(segments, boundaryX, delta) {
+    const points = [];
+    for (let i = 0; i < segments.length; i++) {
+      const segment = segments[i];
+      const x = boundaryX + segment.offset + delta;
+      points.push({ x, y: segment.y });
+      points.push({ x, y: segment.y + segment.height });
+      if (i + 1 < segments.length) {
+        const nextX = boundaryX + segments[i + 1].offset + delta;
+        points.push({ x: nextX, y: segment.y + segment.height });
+      }
+    }
+    return points;
+  }
+
+  // Fills a static band that hugs the same jagged shoreline contour as the
+  // water/sand fills, offset by two deltas (e.g. a few px into the water,
+  // a few px into the sand). Used for the waterline foam edge and wet-sand
+  // band - no animation, just a fixed shape following the existing profile.
+  function drawProfiledBand(profile, boundaryX, yTop, yBottom, innerDelta, outerDelta, color) {
+    const segments = [];
+    forEachProfileSegment(profile, yTop, yBottom, (y, height, offset) => {
+      segments.push({ y, height, offset });
+    });
+    if (segments.length === 0) return;
+
+    const innerEdge = buildSteppedEdge(segments, boundaryX, innerDelta);
+    const outerEdge = buildSteppedEdge(segments, boundaryX, outerDelta);
+
+    ctx.fillStyle = color;
+    ctx.beginPath();
+    ctx.moveTo(innerEdge[0].x, innerEdge[0].y);
+    for (let i = 1; i < innerEdge.length; i++) ctx.lineTo(innerEdge[i].x, innerEdge[i].y);
+    for (let i = outerEdge.length - 1; i >= 0; i--) ctx.lineTo(outerEdge[i].x, outerEdge[i].y);
+    ctx.closePath();
+    ctx.fill();
+  }
+
+  // Two-value waterline seam: a darker wet-sand band just past the shore,
+  // plus a light foam edge straddling the contour itself. Both are static
+  // fills tracking SHORELINE_PROFILE - no tide motion, just shading.
+  const WATERLINE_WET_SAND = shadeColor(PALETTE.sand, -70);
+  const WATERLINE_FOAM = '#eaf6f7';
+  function drawWaterline(boundaryX, yTop, yBottom) {
+    drawProfiledBand(SHORELINE_PROFILE, boundaryX, yTop, yBottom, 0, 7, WATERLINE_WET_SAND);
+    drawProfiledBand(SHORELINE_PROFILE, boundaryX, yTop, yBottom, -3, 2, WATERLINE_FOAM);
   }
 
   function drawWaterMark(x, y, variant) {
@@ -1100,13 +1177,17 @@
 
     // 1. Draw sand beach background - flat surfaces with only a sparse
     // pixel-speckle hint of grain, no checker shading or banded texture.
-    ctx.fillStyle = '#f0d29c';
+    ctx.fillStyle = PALETTE.sand;
     ctx.fillRect(0, viewTop, canvas.width, 800);
-    drawSpeckleField(150, 720, viewTop, viewBottom, 64, SAND_SPECKLES, '#c9a873');
+    drawSpeckleField(150, 720, viewTop, viewBottom, 64, SAND_SPECKLES, PALETTE.sandGrain);
 
     // Draw Ocean (water) on left - a plain flat fill with a small, stable
     // stepped edge. This changes only the shoreline silhouette, not gameplay.
     drawOcean(150, viewTop, viewBottom);
+
+    // Static waterline seam - wet-sand band plus a light foam edge - so the
+    // water/sand meeting line reads as shaded rather than a flat hard edge.
+    drawWaterline(150, viewTop, viewBottom);
 
     // Sparse water details use irregular 2D scatter rather than Y rows.
     drawWaterDetails(viewTop, viewBottom);
@@ -1118,7 +1199,7 @@
     // Draw dunes & dry grass on the right side with a separate restrained
     // stepped contour, keeping the center sand visually open and playable.
     drawDunes(720, viewTop, viewBottom);
-    drawSpeckleField(720, 800, viewTop, viewBottom, 56, DUNE_SPECKLES, '#bfa06c');
+    drawSpeckleField(720, 800, viewTop, viewBottom, 56, DUNE_SPECKLES, PALETTE.duneGrain);
 
     // Draw Dune tufts & plants
     for (let y = Math.floor(viewTop / 120) * 120 - 120; y < viewBottom; y += 120) {
@@ -1139,7 +1220,7 @@
         drawGroundShadow(shell.x, shell.y + shell.size * 0.6, shell.size * 0.6, shell.size * 0.28);
         drawShellShape(shell);
         // Very limited deterministic shell-adjacent sand marks
-        ctx.fillStyle = '#c9a873';
+        ctx.fillStyle = PALETTE.sandGrain;
         const markOffset = Math.abs(Math.sin(shell.x * 17.5 + shell.y * 31.2)) % 1;
         if (markOffset > 0.45) {
           ctx.fillRect(shell.x + (markOffset > 0.72 ? 9 : -11), shell.y + 4, 2, 1);
@@ -1190,11 +1271,13 @@
 
   // --- DRAWING HELPER FUNCTIONS ---
 
-  // Two tones only (base + shadow) - simple silhouettes that support the
-  // scene without competing with it.
+  // Both variants are derived from the single warm PALETTE.grass hue via
+  // shadeColor(), rather than two independently-invented greens, so tufts
+  // and the dune plant read as the same warm-leaning family. Three tones
+  // (base/shadow/highlight) per variant, matching the object shading pass.
   const GRASS_PALETTES = [
-    { base: '#8ec25d', shadow: '#568132' },
-    { base: '#96c55d', shadow: '#5c9237' }
+    { base: PALETTE.grass, shadow: shadeColor(PALETTE.grass, -34), highlight: shadeColor(PALETTE.grass, 30) },
+    { base: shadeColor(PALETTE.grass, 8), shadow: shadeColor(PALETTE.grass, -26), highlight: shadeColor(PALETTE.grass, 36) }
   ];
 
   function drawGrassTuft(x, y, variant) {
@@ -1212,22 +1295,27 @@
     if (sway > 0.4) swayOffset = 2;
     else if (sway < -0.4) swayOffset = -2;
 
-    // Three plain blades - no highlight layer (top segment sways)
+    // Three plain blades
     ctx.fillStyle = p.base;
     ctx.fillRect(x - 1, y + 4, 3, 6);
     ctx.fillRect(x - 1 + swayOffset, y - 2, 3, 6);
-    
+
     ctx.fillRect(x - 6, y + 7, 3, 5);
     ctx.fillRect(x - 6 + swayOffset, y + 2, 3, 5);
-    
+
     ctx.fillRect(x + 5, y + 8, 3, 4);
     ctx.fillRect(x + 5 + swayOffset, y + 4, 3, 4);
+
+    // Single highlight cap on the tallest (swaying) blade - the third tone
+    // in the base/shadow/highlight recipe shared with every other object.
+    ctx.fillStyle = p.highlight;
+    ctx.fillRect(x - 1 + swayOffset, y - 2, 3, 2);
   }
 
   // Larger dune plant used sparingly among the grass tufts for variety -
-  // one stem, two leaf clusters, two tones.
+  // one stem, two leaf clusters, base/shadow/highlight tones.
   function drawDunePlant(x, y, row) {
-    ctx.fillStyle = '#568132';
+    ctx.fillStyle = shadeColor(PALETTE.grass, -34);
     ctx.fillRect(x - 6, y + 12, 14, 3);
 
     // Calculate sway
@@ -1238,13 +1326,18 @@
     if (sway > 0.4) swayOffset = 2;
     else if (sway < -0.4) swayOffset = -2;
 
-    ctx.fillStyle = '#7a5a3a';
+    ctx.fillStyle = shadeColor(PALETTE.wood, -10);
     ctx.fillRect(x - 1, y + 5, 2, 7); // bottom stem
     ctx.fillRect(x - 1 + swayOffset, y - 2, 2, 7); // top stem
 
-    ctx.fillStyle = '#8ec25d';
+    ctx.fillStyle = PALETTE.grass;
     ctx.fillRect(x - 7 + swayOffset, y - 10, 6, 6);
     ctx.fillRect(x + 2 + swayOffset, y - 14, 6, 6);
+
+    // Highlight tone on each leaf cluster
+    ctx.fillStyle = shadeColor(PALETTE.grass, 30);
+    ctx.fillRect(x - 7 + swayOffset, y - 10, 6, 2);
+    ctx.fillRect(x + 2 + swayOffset, y - 14, 6, 2);
   }
 
   function drawInterestPoint(ip) {
@@ -1257,23 +1350,27 @@
     ctx.translate(ip.x, ip.y);
 
     if (ip.type === 'rock') {
-      // Main rock shape - warm stone tone, deliberately distinct from
-      // Bupa's cool gray (#808285) so he stays readable stopped beside it.
-      // Flat fill plus one shadow band - no separate highlight patches.
-      ctx.fillStyle = '#6e6a5f';
+      // Main rock shape - warm stone tone from PALETTE.stone, deliberately
+      // distinct from Bupa's fur tone so he stays readable stopped beside
+      // it. Base/shadow/highlight three-tone treatment.
+      ctx.fillStyle = PALETTE.stone;
       ctx.fillRect(-12, -8, 24, 16);
-      ctx.fillStyle = '#46433a'; // shadow
+      ctx.fillStyle = shadeColor(PALETTE.stone, -34); // shadow
       ctx.fillRect(-12, 4, 24, 4);
+      ctx.fillStyle = shadeColor(PALETTE.stone, 30); // highlight
+      ctx.fillRect(-12, -8, 24, 3);
       // Small shell-cluster accents at the base of the rock pile
       drawShellShape({ x: -14, y: 9, size: 5, color: '#e8a9a0', shapeType: 2 });
       drawShellShape({ x: 12, y: 8, size: 4, color: '#8fb9c9', shapeType: 0 });
     }
     else if (ip.type === 'driftwood') {
-      // Driftwood log - plain fill plus one highlight band, no grain lines
-      // or branch stubs.
-      ctx.fillStyle = '#8a5c38';
+      // Driftwood log - base/shadow/highlight three-tone treatment (was
+      // base+highlight only), no grain lines or branch stubs.
+      ctx.fillStyle = PALETTE.wood;
       ctx.fillRect(-18, -4, 36, 8);
-      ctx.fillStyle = '#aa7c58'; // highlight
+      ctx.fillStyle = shadeColor(PALETTE.wood, -30); // shadow
+      ctx.fillRect(-18, 1, 36, 3);
+      ctx.fillStyle = shadeColor(PALETTE.wood, 30); // highlight
       ctx.fillRect(-14, -4, 28, 3);
       // Small grass tuft growing beside the driftwood
       drawGrassTuft(20, -2, Math.round(ip.x));
@@ -1283,7 +1380,9 @@
       // shallow beach puddle rather than a circular marker. Scaled 1.4x so
       // the tidepool stays visually consistent with the new beach ball and
       // umbrella POIs without changing its puddle shape or shimmer behavior.
-      ctx.fillStyle = '#247e9e';
+      // Deep/mid/highlight tones now derive from one warm PALETTE.tidepool
+      // hue instead of three independently-chosen blues.
+      ctx.fillStyle = shadeColor(PALETTE.tidepool, -14);
       ctx.beginPath();
       ctx.moveTo(-28, -3);
       ctx.lineTo(-22, -11);
@@ -1301,7 +1400,7 @@
       ctx.closePath();
       ctx.fill();
 
-      ctx.fillStyle = '#2e9dbf';
+      ctx.fillStyle = PALETTE.tidepool;
       ctx.beginPath();
       ctx.moveTo(-22, -3);
       ctx.lineTo(-17, -8);
@@ -1320,7 +1419,7 @@
 
       // Two broken highlight pixels imply shallow reflected water without a
       // circular inner ring.
-      ctx.fillStyle = '#5ec3df';
+      ctx.fillStyle = shadeColor(PALETTE.tidepool, 40);
       ctx.fillRect(-14, -6, 6, 2);
       ctx.fillRect(-6, -8, 4, 2);
 
@@ -1334,9 +1433,9 @@
     else if (ip.type === 'beachball') {
       // Beach ball - bright round striped prop, the most legible beach
       // object at gameplay scale. Filled circle pixelates cleanly through
-      // the half-res buffer; three colored vertical stripes + a white
-      // highlight pixel read as "beach ball" in under a second. Colors
-      // chosen to stay clear of sand (#f0d29c) and Bupa's gray (#808285).
+      // the half-res buffer; three colored vertical stripes + a lower
+      // shadow band + a white highlight pixel read as "beach ball" in
+      // under a second. Colors chosen to stay clear of sand and Bupa's fur.
       const r = 18;
       // White base
       ctx.fillStyle = '#fdf7ec';
@@ -1348,12 +1447,16 @@
       ctx.beginPath();
       ctx.arc(0, -2, r, 0, Math.PI * 2);
       ctx.clip();
-      ctx.fillStyle = '#e85a4f'; // red stripe
+      ctx.fillStyle = PALETTE.coral; // red stripe
       ctx.fillRect(-r, -2 - r, 11, r * 2);
       ctx.fillStyle = '#3d7eb8'; // blue stripe
       ctx.fillRect(-6, -2 - r, 11, r * 2);
-      ctx.fillStyle = '#f2c14e'; // yellow stripe
+      ctx.fillStyle = PALETTE.gold; // yellow stripe
       ctx.fillRect(6, -2 - r, 11, r * 2);
+      // Lower-rim shadow tone - the third (shadow) tone in the
+      // base/shadow/highlight recipe, kept subtle so stripes stay clear.
+      ctx.fillStyle = 'rgba(0, 0, 0, 0.16)';
+      ctx.fillRect(-r, 6, r * 2, r);
       ctx.restore();
       // Tiny highlight pixel (upper left)
       ctx.fillStyle = '#ffffff';
@@ -1364,25 +1467,37 @@
       // on the sand. Reads as "umbrella" at a glance and gives Bupa a
       // shade patch to sit in. Shade is drawn larger than the default
       // ground shadow so it reads as shade, not as a separate object.
-      // Pole (wood tone, shared with driftwood) with a slight lean
-      ctx.fillStyle = '#8a5c38';
+      // Pole (wood tone, shared with driftwood) with a slight lean;
+      // highlight sliver clipped to the pole's own silhouette.
+      ctx.save();
       ctx.beginPath();
       ctx.moveTo(1, 12);
       ctx.lineTo(4, 12);
       ctx.lineTo(1, -30);
       ctx.lineTo(-2, -30);
       ctx.closePath();
+      ctx.fillStyle = PALETTE.wood;
       ctx.fill();
-      // Canopy (triangular, bright red, slightly asymmetric)
-      ctx.fillStyle = '#e85a4f';
+      ctx.clip();
+      ctx.fillStyle = shadeColor(PALETTE.wood, 30);
+      ctx.fillRect(1, -30, 2, 42);
+      ctx.restore();
+      // Canopy (triangular, warm coral, slightly asymmetric), with a
+      // clipped highlight near the apex - base/shadow/highlight treatment.
+      ctx.save();
       ctx.beginPath();
       ctx.moveTo(-24, -24);
       ctx.lineTo(20, -26);
       ctx.lineTo(-1, -40);
       ctx.closePath();
+      ctx.fillStyle = PALETTE.coral;
       ctx.fill();
+      ctx.clip();
+      ctx.fillStyle = shadeColor(PALETTE.coral, 34);
+      ctx.fillRect(-6, -40, 12, 5);
+      ctx.restore();
       // Canopy underside shadow band
-      ctx.fillStyle = '#b8453e';
+      ctx.fillStyle = shadeColor(PALETTE.coral, -30);
       ctx.fillRect(-24, -26, 44, 2);
       // Shade ellipse on the sand (clearly attached to the umbrella)
       ctx.save();
@@ -1420,20 +1535,25 @@
     }
     ctx.scale(SAILOR_DRAW_SCALE, SAILOR_DRAW_SCALE);
 
-    const hair = '#7a4a2a';       // warm medium brown
-    const hairShadow = '#5e3a20';
+    const hair = PALETTE.hair;         // warm medium brown
+    const hairShadow = shadeColor(hair, -26);
+    const hairHighlight = shadeColor(hair, 26);
     const skin = '#ffd1b3';
-    const outfit = '#3a7cb5';
-    const outfitShadow = '#2d5f8f';
+    const outfit = PALETTE.outfit;
+    const outfitShadow = shadeColor(outfit, -22);
+    const outfitHighlight = shadeColor(outfit, 22);
 
     const walkOffset = sailor.isMoving ? Math.sin(Date.now() * 0.015) * 4 : 0;
     const pigtailSway = sailor.isMoving ? Math.sin(Date.now() * 0.012) * 2 : 0;
 
     // 1. Back of head: she faces up the beach, away from the viewer, so the
     // entire head is a plain block of hair - no face/eyes drawn on this
-    // side, and no highlight band cluttering the block.
+    // side. Crown highlight and nape-shadow keep the hair block to three
+    // tones without adding any new detail that could muddy the silhouette.
     ctx.fillStyle = hair;
     ctx.fillRect(-9, -32, 18, 14);
+    ctx.fillStyle = hairHighlight;
+    ctx.fillRect(-9, -32, 18, 3);
     ctx.fillStyle = hairShadow;
     ctx.fillRect(-9, -20, 18, 2);
 
@@ -1444,6 +1564,8 @@
     // 2. Pigtails - two big, plain round bunches held clear of the head.
     // Adjusted raw pigtail offsets outwards by 2px to compensate for the smaller
     // SAILOR_DRAW_SCALE (0.74) and prevent the head-to-pigtail gap from collapsing.
+    // Shadow stays confined to the underside/overlap area only, per the
+    // pigtail-readability rule - never a full-shape darken.
     ctx.fillStyle = hair;
     ctx.fillRect(-25 + pigtailSway, -28, 10, 5);
     ctx.fillRect(-27 + pigtailSway, -23, 8, 6);
@@ -1454,9 +1576,11 @@
     ctx.fillRect(-27 + pigtailSway, -20, 8, 3);
     ctx.fillRect(19 - pigtailSway, -20, 8, 3);
 
-    // 3. Outfit - plain blue dress, back view, no collar trim or highlight
+    // 3. Outfit - plain blue dress, back view, base/shadow/highlight tones
     ctx.fillStyle = outfit;
     ctx.fillRect(-10, -11, 20, 15);
+    ctx.fillStyle = outfitHighlight;
+    ctx.fillRect(-10, -11, 20, 3);
     ctx.fillStyle = outfitShadow;
     ctx.fillRect(-10, 0, 20, 4);
 
@@ -1488,9 +1612,13 @@
       ctx.scale(-1, 1);
     }
 
-    // Color definitions
-    const gray = '#808285';
-    const darkGray = '#58595b';
+    // Color definitions - fur base warmed to join the beach's warm family;
+    // shadow/highlight are both derived from that one base tone. White
+    // patch stays the one pure-white note (unchanged) per the visual
+    // redesign brief's Bupa readability rule.
+    const gray = PALETTE.bupaFur;
+    const darkGray = shadeColor(gray, -30);
+    const furHighlight = shadeColor(gray, 28);
     const white = '#f1f2f2';
 
     // Timers for personality behaviors
@@ -1522,7 +1650,9 @@
       // Head (facing back, so eyes looking down/sideways)
       ctx.fillStyle = gray;
       ctx.fillRect(-8, -22, 16, 10);
-      
+      ctx.fillStyle = furHighlight; // head-top highlight, third fur tone
+      ctx.fillRect(-8, -22, 16, 2);
+
       // Ears (ear flick idle animation)
       ctx.fillStyle = darkGray;
       ctx.fillRect(-8, -26 + earFlick, 4, 4);
@@ -1585,10 +1715,12 @@
         // Head low
         ctx.fillStyle = gray;
         ctx.fillRect(6, -12, 10, 8);
+        ctx.fillStyle = furHighlight;
+        ctx.fillRect(6, -12, 10, 2);
         ctx.fillStyle = darkGray; // ears
         ctx.fillRect(8, -14, 2, 4);
         ctx.fillRect(12, -14 + earFlick, 2, 4);
-        
+
         // Eye
         if (isBlinking) {
           ctx.fillStyle = darkGray;
@@ -1597,7 +1729,7 @@
           ctx.fillStyle = '#7ac143'; // sniffing eye
           ctx.fillRect(10, -10, 2, 2);
         }
-      } 
+      }
       else if (bupa.stateProgress < 0.8) {
         // --- STAGE 2: CUSTOM INVESTIGATE PERFORMANCES ---
         if (target && target.type === 'tidepool') {
@@ -1632,10 +1764,12 @@
           // Head low
           ctx.fillStyle = gray;
           ctx.fillRect(6, -12, 10, 8);
+          ctx.fillStyle = furHighlight;
+          ctx.fillRect(6, -12, 10, 2);
           ctx.fillStyle = darkGray; // ears
           ctx.fillRect(8, -14 + earFlick, 2, 4);
           ctx.fillRect(12, -14, 2, 4);
-          
+
           // Eye
           if (isBlinking) {
             ctx.fillStyle = darkGray;
@@ -1680,6 +1814,8 @@
           // Head close
           ctx.fillStyle = gray;
           ctx.fillRect(8, -12, 10, 8);
+          ctx.fillStyle = furHighlight;
+          ctx.fillRect(8, -12, 10, 2);
           ctx.fillStyle = darkGray; // ears
           ctx.fillRect(10, -14, 2, 4);
           ctx.fillRect(14, -14 + earFlick, 2, 4);
@@ -1716,6 +1852,8 @@
           // Head bobbing
           ctx.fillStyle = gray;
           ctx.fillRect(2, -18 + bobOffset, 10, 8);
+          ctx.fillStyle = furHighlight;
+          ctx.fillRect(2, -18 + bobOffset, 10, 2);
           ctx.fillStyle = darkGray; // ears
           ctx.fillRect(4, -22 + bobOffset + earFlick, 2, 4);
           ctx.fillRect(8, -22 + bobOffset, 2, 4);
@@ -1763,6 +1901,8 @@
           // Head low
           ctx.fillStyle = gray;
           ctx.fillRect(6, -12, 10, 8);
+          ctx.fillStyle = furHighlight;
+          ctx.fillRect(6, -12, 10, 2);
           ctx.fillStyle = darkGray; // ears
           ctx.fillRect(8, -14 + earFlick, 2, 4);
           ctx.fillRect(12, -14, 2, 4);
@@ -1802,6 +1942,8 @@
           // Head (still, ears relaxed)
           ctx.fillStyle = gray;
           ctx.fillRect(2, -18, 10, 8);
+          ctx.fillStyle = furHighlight;
+          ctx.fillRect(2, -18, 10, 2);
           ctx.fillStyle = darkGray; // ears
           ctx.fillRect(4, -22 + earFlick, 2, 4);
           ctx.fillRect(8, -22, 2, 4);
@@ -1835,6 +1977,8 @@
           // Head low peeking
           ctx.fillStyle = gray;
           ctx.fillRect(4, -14, 10, 8);
+          ctx.fillStyle = furHighlight;
+          ctx.fillRect(4, -14, 10, 2);
           ctx.fillStyle = darkGray; // ears
           ctx.fillRect(6, -16 + earFlick, 2, 4);
           ctx.fillRect(10, -16, 2, 4);
@@ -1873,6 +2017,8 @@
         // Head high & alert
         ctx.fillStyle = gray;
         ctx.fillRect(4, -20, 10, 8);
+        ctx.fillStyle = furHighlight;
+        ctx.fillRect(4, -20, 10, 2);
         ctx.fillStyle = darkGray; // ears
         ctx.fillRect(6, -22, 2, 4);
         ctx.fillRect(10, -22 + earFlick, 2, 4);
@@ -1913,6 +2059,8 @@
       // Head
       ctx.fillStyle = gray;
       ctx.fillRect(4, -18, 10, 8);
+      ctx.fillStyle = furHighlight;
+      ctx.fillRect(4, -18, 10, 2);
       ctx.fillStyle = darkGray; // ears
       ctx.fillRect(6, -22, 2, 4);
       ctx.fillRect(10, -22, 2, 4);
@@ -2015,7 +2163,7 @@
     }
     
     if (yOffset > 0) {
-      ctx.fillStyle = '#c9a873';
+      ctx.fillStyle = PALETTE.sandGrain;
       ctx.fillRect(-5, 2, 10, 2);
     }
 
