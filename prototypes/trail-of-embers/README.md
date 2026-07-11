@@ -2,7 +2,7 @@
 
 ARTIFACT TYPE: Probe (playable prototype)
 AUTHORITY: PROBE
-STATUS: Draft — Level 8 Beast-Gate pass (added beast-activated gate, trigger zone, and Level 8) and Level 9 One-Way Passages probe untested, human-gated
+STATUS: Draft — Level 8 Beast-Gate pass (added beast-activated gate, trigger zone, and Level 8), Level 9 One-Way Passages probe, and Level 10 Beast Errand probe (combining Cinder Cache, Beast Gate, and One-Way Passages) untested, human-gated
 SOURCE-OF-TRUTH FILES TOUCHED: none
 
 This is the playable build for the probe defined in
@@ -48,20 +48,22 @@ Gamepad / Controller Support (Standard mapping):
 - **Start / Menu Button (Button 9)** — restart current level
 
 Prototype testing shortcut:
-- Press number keys 1–9 to jump directly to a level.
+- Press number keys 1–9 to jump directly to a level. Press 0 for Level 10.
 
 ## Level / challenge structure
 
-Nine fixed, hand-placed levels (three from Challenge Pass 1, one larger
+Ten fixed, hand-placed levels (three from Challenge Pass 1, one larger
 maze from Scale Pass 1, one larger still from the Fullscreen/Larger Maze
 Pass, one bigger and tighter still from the bounded maze pass, one from
-the Cinder Cache pass, one from the beast-gate probe pass, and one from
-the one-way passages probe pass). The HUD shows the current level. Winning a level offers **N**
+the Cinder Cache pass, one from the beast-gate probe pass, one from the
+one-way passages probe pass, and one synthesis probe combining all three
+mechanics). The HUD shows the current level. Winning a level offers **N**
 to continue; losing restarts the same level with **R**. The core loop is
-identical in all nine — only simple per-level data varies (start
+identical in all ten — only simple per-level data varies (start
 positions, safe zone, obstacle rectangles, playfield size, per-level beast
 speed and ember tuning, Cinder Cache placement, gate/trigger zone
-configuration on level 8, and one-way passage placement on level 9).
+configuration on levels 8 and 10, and one-way passage placement on levels
+9 and 10).
 
 1. **First Light** — the exact layout and tuning from the successful first
    playtest, unchanged. Slightly easy on purpose: teaches ember-as-bait.
@@ -223,7 +225,16 @@ configuration on level 8, and one-way passage placement on level 9).
     - **Beast ignores passages** — the beast still moves in straight lines through all obstacles and gates, so the wrong turn trades time for exposure in its territory.
     - **Diegetic readability** — each gate is marked with a worn floor tint and blocky chevron arrows pointing the allowed direction, visible inside the player's torch radius with no text labels or portal effects.
     - **No new resources** — no Cinder Cache, no gate, no tutorial panels; the probe is purely about whether directional passages can make a wrong turn legible and recoverable.
-    - **Tuning** — beast speed is lowered to 140 (from level 6's 150) to keep the loop forgiving, with the standard 1500ms cooldown / 4000ms lifetime so the only new variable is the one-way geometry.
+     - **Tuning** — beast speed is lowered to 140 (from level 6's 150) to keep the loop forgiving, with the standard 1500ms cooldown / 4000ms lifetime so the only new variable is the one-way geometry.
+10. **The Beast Errand** (Level 10 synthesis probe) — same 1800×1000 scale as levels 6–9. First level combining Cinder Cache, Beast Gate, and One-Way Passages. Deliberate design beats:
+     - **Start bottom-left, beast far upper-right** — player begins in a small start chamber; beast starts distant, proximity rumble faint.
+     - **T-junction route choice** — a central vertical wall creates an unambiguous left/right decision. Left leads toward the closed gate (teachable dead end: player arrives with no charge, learns they need the other route). Right leads toward the cache and one-way commitment.
+     - **Cinder Cache alcove** — sealed three-sided nook off the right corridor, same "out-and-back" shape as Level 7. A meaningful detour but not a chore; player arrives at the one-way with charge in hand.
+     - **One-way commitment passage** — rightward-only passage through an interior wall into the beast's territory. Point of no return; cannot go back.
+     - **Lure chamber** — mostly open area in beast territory with room to circle and position. Beast roams here.
+     - **Beast Gate with co-located trigger** — gate between lure chamber and safe zone; trigger zone overlaps the gate doorway. Beast enters trigger → gate opens. Causal relationship is visible: player drops ember at threshold, beast chases into the lit zone, gate opens in the same moment.
+     - **Short escape** — safe zone is a short tense dash past the open gate. Cinder Charge is the safety net if cooldown isn't ready, but not mandatory.
+     - **Tuning** — beast speed 145 (between Level 8's 150 and Level 9's 140), ember cooldown 3500ms (same as Levels 7–8), ember lifetime 4000ms (same as Levels 3–9).
 
 ## What changed in the One-Way Passages Probe Pass
 
@@ -256,7 +267,7 @@ configuration on level 8, and one-way passage placement on level 9).
 
 - Level 7, "The Ember Ring," as described above — new level data only.
 - One new mechanic: the **Cinder Cache**, a collectible that only exists on
-  levels whose data lists one (currently level 7 only). See "What's
+   levels whose data lists one (currently levels 7, 8, and 10). See "What's
   implemented" below.
 - The final win message now says seven levels instead of six (and is no
   longer hardcoded to a specific number).
@@ -562,13 +573,13 @@ Run the new larger level (5, "The Deep Maze") at least 3 times.
 
 ## What's implemented
 
-- Nine fixed single-screen dark levels (not procedural), each a handful of
-  hardcoded obstacle rectangles. Levels 1–3 run at 900×560, level 4 at
-  1280×760, level 5 at 1600×900, levels 6–9 at 1800×1000 (the canvas
-  resizes per level — no scrolling camera; a CSS `max-width`/`max-height`
-  cap shrinks the display to fit smaller windows without changing
-  field-pixel coordinates).
-- **Cinder Cache / Cinder Charge** (level 7 only): a small pulsing pickup
+- Ten fixed single-screen dark levels (not procedural), each a handful of
+   hardcoded obstacle rectangles. Levels 1–3 run at 900×560, level 4 at
+   1280×760, level 5 at 1600×900, levels 6–10 at 1800×1000 (the canvas
+   resizes per level — no scrolling camera; a CSS `max-width`/`max-height`
+   cap shrinks the display to fit smaller windows without changing
+   field-pixel coordinates).
+- **Cinder Cache / Cinder Charge** (levels 7, 8, and 10): a small pulsing pickup
   placed via an optional per-level `cinderCaches` array in the level data —
   levels without the field simply have none. Touching one removes it and
   grants one stored **Cinder Charge** (at most one held at a time); no
@@ -592,9 +603,9 @@ Run the new larger level (5, "The Deep Maze") at least 3 times.
   The charge, its pickup/spend message timers, and the cache itself all
   reset with the rest of level state on **R**/**Shift+R** — no carryover
   between levels.
-- **Beast-Activated Gate** (level 8 only): a horizontal gate that blocks player movement when closed but does not block the beast. It is open only while the beast is inside the trigger zone. Snapped to the rendering grid, it draws as a custom barred portcullis when closed, and retracts to the sides when open.
-- **Trigger Zone** (level 8 only): a rectangular floor rune/sigil co-located with the gate doorway that opens the gate when the beast occupies it, accompanied by a dynamic light punch to keep the beast visible.
-- **One-Way Passages** (level 9 only): directional corridor gates placed via an optional per-level `oneWayPassages` array. Each passage has an allowed cardinal direction; the player can move with that direction through the passage but is blocked when moving against it. The beast ignores them entirely. They are drawn as a subtle floor marking with blocky chevron arrows; no text labels, no glowing portal effects.
+- **Beast-Activated Gate** (levels 8 and 10): a horizontal gate that blocks player movement when closed but does not block the beast. It is open only while the beast is inside the trigger zone. Snapped to the rendering grid, it draws as a custom barred portcullis when closed, and retracts to the sides when open.
+- **Trigger Zone** (levels 8 and 10): a rectangular floor rune/sigil co-located with the gate doorway that opens the gate when the beast occupies it, accompanied by a dynamic light punch to keep the beast visible.
+- **One-Way Passages** (levels 9 and 10): directional corridor gates placed via an optional per-level `oneWayPassages` array. Each passage has an allowed cardinal direction; the player can move with that direction through the passage but is blocked when moving against it. The beast ignores them entirely. They are drawn as a subtle floor marking with blocky chevron arrows; no text labels, no glowing portal effects.
 - Player movement (8-directional, arrow keys/WASD) with simple
   circle-vs-rectangle collision against obstacles.
 - Constant torch radius around the player — this is the player's baseline
@@ -632,7 +643,7 @@ Run the new larger level (5, "The Deep Maze") at least 3 times.
 
 ## What's intentionally missing (per the probe brief's non-goals)
 
-- No procedural generation — all nine levels are hardcoded data.
+- No procedural generation — all ten levels are hardcoded data.
 - No true responsive/fullscreen layout, camera, or viewport system —
   level 5's bigger space comes from a bigger canvas plus a CSS scale-to-fit
   cap, so the whole field is still always fully rendered (the fog is what

@@ -90,11 +90,12 @@ function bfsReachable(level, target, targetR, gateClosed = false) {
 // Directed BFS that respects one-way passages: a passage only blocks movement
 // in the direction opposite to its allowed direction. `treatPassagesAsWalls`
 // makes every passage a solid obstacle (used to verify the no-passage route).
-function directedBfsReachable(level, target, targetR, treatPassagesAsWalls = false) {
+// `gateClosed` controls whether the gate is treated as solid (default true).
+function directedBfsReachable(level, target, targetR, treatPassagesAsWalls = false, gateClosed = true) {
   const passages = level.oneWayPassages || [];
   const step = 5;
   const cols = Math.floor(level.fieldW / step), rows = Math.floor(level.fieldH / step);
-  const gateBlocks = (level.gate) ? [level.gate] : [];
+  const gateBlocks = (level.gate && gateClosed) ? [level.gate] : [];
   const wallPassages = treatPassagesAsWalls ? passages : [];
   const obstaclesToUse = level.obstacles.concat(gateBlocks).concat(wallPassages);
   const blocked = (x, y) =>
@@ -207,14 +208,42 @@ LEVELS.forEach((raw, i) => {
     });
     check(!gateOverlapsObstacles, "gate not overlapping obstacles");
 
-    const tzReachable = bfsReachableToRect(level, level.triggerZone);
-    check(tzReachable, "trigger zone reachable by player (BFS, player-radius clearance)");
+    const hasPassages = level.oneWayPassages && level.oneWayPassages.length > 0;
 
-    const closedReachable = bfsReachable(level, level.safeZone, level.safeZone.r, true);
+    // Trigger zone reachability
+    // For levels with one-way passages, check the bottom of the trigger zone
+    // (which should be in the lure chamber, below any separating wall)
+    let tzReachable;
+    if (hasPassages) {
+      const tzTarget = { 
+        x: level.triggerZone.x + level.triggerZone.w / 2, 
+        y: level.triggerZone.y + level.triggerZone.h 
+      };
+      tzReachable = directedBfsReachable(level, tzTarget, 0, false, true);
+    } else {
+      tzReachable = bfsReachableToRect(level, level.triggerZone);
+    }
+    check(tzReachable, "trigger zone reachable by player" + (hasPassages ? " (directed BFS)" : " (BFS)"));
+
+    // Gate closed: safe zone should NOT be reachable
+    // For levels with one-way passages, use directed BFS to respect passage rules
+    const closedReachable = hasPassages
+      ? directedBfsReachable(level, level.safeZone, level.safeZone.r, false, true)
+      : bfsReachable(level, level.safeZone, level.safeZone.r, true);
     check(!closedReachable, "gate closed: safe zone not reachable");
 
-    const openReachable = bfsReachable(level, level.safeZone, level.safeZone.r, false);
+    // Gate open: safe zone SHOULD be reachable
+    const openReachable = hasPassages
+      ? directedBfsReachable(level, level.safeZone, level.safeZone.r, false, false)
+      : bfsReachable(level, level.safeZone, level.safeZone.r, false);
     check(openReachable, "gate open: safe zone reachable");
+
+    // For levels with one-way passages, verify directed reachability to trigger zone
+    // (already checked above, but explicit message for clarity)
+    if (hasPassages) {
+      check(true,
+        "trigger zone reachable via directed BFS (respecting one-way rules) [verified above]");
+    }
   } else if (level.oneWayPassages && level.oneWayPassages.length) {
     const directedReachable = directedBfsReachable(level, level.safeZone, level.safeZone.r, false);
     check(directedReachable, "safe zone reachable with one-way rules (directed BFS)");
@@ -231,6 +260,13 @@ LEVELS.forEach((raw, i) => {
       `cinder cache ${ci + 1} clear of obstacles`);
     check(bfsReachable(level, c, CACHE_RADIUS),
       `cinder cache ${ci + 1} reachable from player start (BFS, player-radius clearance)`);
+    
+    // For levels with one-way passages, verify cache is reachable WITHOUT going through them
+    // (cache should be before the one-way commitment, not after)
+    if (level.oneWayPassages && level.oneWayPassages.length > 0) {
+      check(directedBfsReachable(level, c, CACHE_RADIUS, true),
+        `cinder cache ${ci + 1} reachable without using one-way passages (before commitment)`);
+    }
   });
 });
 

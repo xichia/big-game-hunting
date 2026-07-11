@@ -565,6 +565,95 @@ const LEVELS = [
       { x: 200, y: 600, w: 200, h: 24 },   // left horizontal baffle 2
     ],
   },
+  {
+    name: "The Beast Errand",
+    // Level 10 probe: first synthesis level combining Cinder Cache, Beast Gate,
+    // and One-Way Passages. Tests whether the three mechanics create one tense
+    // survival sequence — commit through a one-way, lure the beast to a gate
+    // trigger, use the charge as escape safety net — without becoming puzzle soup.
+    //
+    // Topology:
+    //   - Start bottom-left. Beast starts far away upper-right.
+    //   - T-junction: left leads toward the closed gate (teachable dead end),
+    //     right leads toward the cache alcove and one-way commitment.
+    //   - Cache alcove: sealed three-sided nook off the right corridor, a real
+    //     detour but not a chore. Player arrives at the one-way with charge in hand.
+    //   - One-way passage: rightward through the interior wall into the lure
+    //     chamber. Point of no return — cannot go back.
+    //   - Lure chamber: mostly open area in beast territory. Room to circle and
+    //     position. Beast roams here.
+    //   - Beast Gate: between lure chamber and safe zone. Trigger zone co-located
+    //     with the gate doorway. Beast enters trigger → gate opens.
+    //   - Escape: short dash through the open gate to the safe zone. Cinder Charge
+    //     is the safety net if cooldown isn't ready.
+    //
+    // Tuning: beast speed 145 (between L8's 150 and L9's 140), cooldown 3500ms
+    // (same as L7-8), lifetime 4000ms (same as L3-9). Field 1800x1000.
+    fieldW: 1800,
+    fieldH: 1000,
+    playerStart: { x: 70, y: 930 },
+    beastStart: { x: 1500, y: 150 },
+    safeZone: { x: 1700, y: 70, r: 28 },
+    beastSpeed: 145,
+    emberCooldownMs: 3500,
+    emberLifetimeMs: 4000,
+    cinderCaches: [{ x: 663, y: 710 }],
+    gate: { x: 1100, y: 250, w: 120, h: 24 },
+    triggerZone: { x: 1100, y: 180, w: 120, h: 140 },
+    oneWayPassages: [
+      // Rightward passage through the interior wall at x=800.
+      // Player commits from the cache corridor into the lure chamber.
+      { x: 800, y: 460, w: 24, h: 100, direction: "right" },
+    ],
+    obstacles: [
+      // --- Start chamber (bottom-left) ---
+      // Small enclosed area with exit going north through a gap
+      { x: 250, y: 800, w: 24, h: 200 },  // east wall
+      { x: 0,   y: 800, w: 150, h: 24 },  // north wall left part
+      { x: 200, y: 800, w: 50,  h: 24 },  // north wall right part
+      // Gap at x=150-200, y=800 is the start chamber exit
+
+      // --- T-junction: central vertical wall at x=500 ---
+      // Creates the left/right decision. Gap at y=500-600 connects both sides.
+      { x: 500, y: 0,   w: 24, h: 500 },  // upper segment (y=0 to 500)
+      { x: 500, y: 600, w: 24, h: 400 },  // lower segment (y=600 to 1000)
+
+      // --- Left route (teachable dead end) ---
+      // Horizontal wall at y=350 blocks going further up on the left side.
+      // Player can see the gate in the distance but can't reach it from here.
+      { x: 0, y: 350, w: 500, h: 24 },
+
+      // --- Right route corridor (y=460-650, x=524-800) ---
+      // North wall of corridor
+      { x: 524, y: 460, w: 276, h: 24 },  // x=524 to 800
+      // South wall of corridor (split for alcove entrance gap at x=600-750)
+      { x: 524, y: 650, w: 76,  h: 24 },  // x=524 to 600
+      { x: 750, y: 650, w: 1050, h: 24 }, // x=750 to 1800
+
+      // --- Interior wall at x=800 with one-way passage ---
+      // Vertical wall separating cache corridor from lure chamber.
+      // Gap at y=460-560 is the one-way passage (rightward only).
+      { x: 800, y: 0,   w: 24, h: 460 },  // upper segment (y=0 to 460)
+      { x: 800, y: 560, w: 24, h: 440 },  // lower segment (y=560 to 1000)
+
+      // --- Cinder Cache alcove (below corridor, open from north) ---
+      // Sealed three-sided nook: left wall, right wall, south wall.
+      // Open from the north through the gap in the corridor south wall.
+      { x: 600, y: 650, w: 24,  h: 100 }, // alcove left wall
+      { x: 726, y: 650, w: 24,  h: 100 }, // alcove right wall
+      { x: 600, y: 750, w: 150, h: 24 },  // alcove south wall
+
+      // --- Lure chamber boundary (upper right, y=0-460, x=824-1800) ---
+      // Horizontal wall at y=250 separates lure chamber (below) from safe zone (above).
+      // Gate sits in the gap at x=1100-1220.
+      { x: 824,  y: 250, w: 276,  h: 24 }, // wall left of gate (x=824 to 1100)
+      { x: 1220, y: 250, w: 580,  h: 24 }, // wall right of gate (x=1220 to 1800)
+
+      // --- Escape corridor (above gate, y=0-250) ---
+      // Short corridor guiding player from gate to safe zone
+      { x: 1400, y: 0,   w: 24,  h: 150 },  // vertical baffle
+    ],
+  },
 ];
 
 function isGateOpen() {
@@ -668,9 +757,9 @@ window.addEventListener("keydown", (e) => {
     if (typeof toggleMute === "function") toggleMute();
   }
 
-  if (/^[1-9]$/.test(e.key)) {
-    const num = parseInt(e.key, 10);
-    if (num <= LEVELS.length) {
+  if (/^[0-9]$/.test(e.key)) {
+    const num = e.key === "0" ? 10 : parseInt(e.key, 10);
+    if (num >= 1 && num <= LEVELS.length) {
       loadLevel(num - 1);
     }
   }
