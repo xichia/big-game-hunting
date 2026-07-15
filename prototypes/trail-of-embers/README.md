@@ -2,7 +2,7 @@
 
 ARTIFACT TYPE: Probe (playable prototype)
 AUTHORITY: PROBE
-STATUS: Draft — Level 8 Beast-Gate pass (added beast-activated gate, trigger zone, and Level 8), Level 9 One-Way Passages probe, and Level 10 Beast Errand probe (combining Cinder Cache, Beast Gate, and One-Way Passages) untested, human-gated
+STATUS: Draft — Levels 8–10 remain untested and human-gated. Level 11 Ember Bloom completed Ian's first manual playtest and is revised for a second playtest; it remains human-gated.
 SOURCE-OF-TRUTH FILES TOUCHED: none
 
 This is the playable build for the probe defined in
@@ -31,6 +31,13 @@ open prototypes/trail-of-embers/index.html
 
 (Or double-click `index.html` in Finder — any modern browser works.)
 
+To check level data (spawns in bounds, reachability, pickup placement,
+etc.) without opening a browser:
+
+```
+node prototypes/trail-of-embers/validate-levels.js prototypes/trail-of-embers/index.html
+```
+
 ## Controls
 
 - **Arrow keys / WASD** — move
@@ -49,21 +56,25 @@ Gamepad / Controller Support (Standard mapping):
 
 Prototype testing shortcut:
 - Press number keys 1–9 to jump directly to a level. Press 0 for Level 10.
+  Press **-** (hyphen) for Level 11 (single digits only reach 1–10). It is
+  shown directly in the HUD (`1-9,0 level 1-10` / `- level 11`), including
+  in `?playtest` mode.
 
 ## Level / challenge structure
 
-Ten fixed, hand-placed levels (three from Challenge Pass 1, one larger
+Eleven fixed, hand-placed levels (three from Challenge Pass 1, one larger
 maze from Scale Pass 1, one larger still from the Fullscreen/Larger Maze
 Pass, one bigger and tighter still from the bounded maze pass, one from
 the Cinder Cache pass, one from the beast-gate probe pass, one from the
-one-way passages probe pass, and one synthesis probe combining all three
-mechanics). The HUD shows the current level. Winning a level offers **N**
-to continue; losing restarts the same level with **R**. The core loop is
-identical in all ten — only simple per-level data varies (start
-positions, safe zone, obstacle rectangles, playfield size, per-level beast
-speed and ember tuning, Cinder Cache placement, gate/trigger zone
-configuration on levels 8 and 10, and one-way passage placement on levels
-9 and 10).
+one-way passages probe pass, one synthesis probe combining all three
+mechanics, and one Ember Bloom probe testing a level-local visibility
+upgrade against a full-size maze). The HUD shows the current level. Winning
+a level offers **N** to continue; losing restarts the same level with
+**R**. The core loop is identical in all eleven — only simple per-level
+data varies (start positions, safe zone, obstacle rectangles, playfield
+size, per-level beast speed and ember tuning, Cinder Cache placement,
+gate/trigger zone configuration on levels 8 and 10, one-way passage
+placement on levels 9 and 10, and the Ember Bloom pickup on level 11).
 
 1. **First Light** — the exact layout and tuning from the successful first
    playtest, unchanged. Slightly easy on purpose: teaches ember-as-bait.
@@ -235,6 +246,39 @@ configuration on levels 8 and 10, and one-way passage placement on levels
      - **Beast Gate with co-located trigger** — gate between lure chamber and safe zone; trigger zone overlaps the gate doorway. Beast enters trigger → gate opens. Causal relationship is visible: player drops ember at threshold, beast chases into the lit zone, gate opens in the same moment.
      - **Short escape** — safe zone is a short tense dash past the open gate. Cinder Charge is the safety net if cooldown isn't ready, but not mandatory.
      - **Tuning** — beast speed 145 (between Level 8's 150 and Level 9's 140), ember cooldown 3500ms (same as Levels 7–8), ember lifetime 4000ms (same as Levels 3–9).
+11. **The Ember Bloom** (Level 11 probe — see
+    `artifacts/probes/0011-trail-of-embers-level-11-ember-bloom-probe-brief.md`)
+    pairs a one-time player-light upgrade with a hand-authored **1800×1000**
+    maze, exactly matching Level 10. It has no Cinder Cache, Beast Gate, or
+    One-Way Passages. Ember Bloom appears directly on the opening route and
+    raises player light from 85px to 149px for that attempt. The larger field
+    retains an intentionally predictable introductory zig-zag through route
+    choices, decoy gaps, baffles, a reconnecting loop, and one exposed
+    crossing through the beast's territory. The chamber remains a secondary
+    maze element.
+
+    Before pickup, dropped embers peak at 155px. Each ember dropped after
+    pickup is tagged at drop time and peaks at 210px; its fade curve,
+    cooldown, lifetime, and colour are unchanged. The upgrade, pickup, and
+    all embers reset on death, restart, or level change, and cannot affect
+    Levels 1–10. Geometry checks passed; fairness and maze quality remain
+    playtest-gated.
+
+### Revision 1 (after Ian's first Level 11 playtest)
+
+Ian asked to retain Ember Bloom, wall-through visibility, and the anxious
+three-sided pocket, but to replace the original 900×700 draft with a
+full-size maze and restore a meaningful post-Bloom use for embers. The
+revision therefore uses Level 10's 1800×1000 field, preserves the pocket's
+intent, and makes post-pickup embers peak at 210px. The **-** shortcut and
+its always-visible HUD hint were added for Level 11. The probe remains
+exploratory and requires Ian's second manual playtest.
+
+### Revision 2 (after final Level 11 playtest)
+
+Ember Bloom was restored to the opening route: immediate presentation proved
+stronger than hiding it in the chamber. The expanded maze, predictable
+introductory zig-zag, and enhanced dropped embers remain unchanged.
 
 ## What changed in the One-Way Passages Probe Pass
 
@@ -573,9 +617,9 @@ Run the new larger level (5, "The Deep Maze") at least 3 times.
 
 ## What's implemented
 
-- Ten fixed single-screen dark levels (not procedural), each a handful of
+- Eleven fixed single-screen dark levels (not procedural), each a handful of
    hardcoded obstacle rectangles. Levels 1–3 run at 900×560, level 4 at
-   1280×760, level 5 at 1600×900, levels 6–10 at 1800×1000 (the canvas
+   1280×760, level 5 at 1600×900, levels 6–11 at 1800×1000 (the canvas
    resizes per level — no scrolling camera; a CSS `max-width`/`max-height`
    cap shrinks the display to fit smaller windows without changing
    field-pixel coordinates).
@@ -643,7 +687,7 @@ Run the new larger level (5, "The Deep Maze") at least 3 times.
 
 ## What's intentionally missing (per the probe brief's non-goals)
 
-- No procedural generation — all ten levels are hardcoded data.
+- No procedural generation — all eleven levels are hardcoded data.
 - No true responsive/fullscreen layout, camera, or viewport system —
   level 5's bigger space comes from a bigger canvas plus a CSS scale-to-fit
   cap, so the whole field is still always fully rendered (the fog is what

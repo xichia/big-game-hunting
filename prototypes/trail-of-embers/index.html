@@ -50,9 +50,10 @@
 </head>
 <body>
   <div id="hud">
-    <span><span class="key">Arrows/WASD</span> move &nbsp; <span class="key">Space</span> ember &nbsp; <span class="key">R</span> retry &nbsp; <span class="key">N</span> next &nbsp; <span class="key">M</span> mute<span id="debug-hint">&nbsp; <span class="key">G</span> debug</span></span>
+    <span><span class="key">Arrows/WASD</span> move &nbsp; <span class="key">Space</span> ember &nbsp; <span class="key">R</span> retry &nbsp; <span class="key">N</span> next &nbsp; <span class="key">M</span> mute &nbsp; <span class="key">1-9,0</span> level 1-10 &nbsp; <span class="key">-</span> level 11<span id="debug-hint">&nbsp; <span class="key">G</span> debug</span></span>
     <span id="level-status"></span>
     <span id="cache-status"></span>
+    <span id="bloom-status"></span>
     <span id="audio-status">sound: on</span>
     <span id="ember-status">ember: ready</span>
   </div>
@@ -78,6 +79,25 @@ const EMBER_RADIUS = 155;           // peak illumination radius
 const EMBER_FADE_MS = 1500;         // trailing fade of the light itself (after it stops being a target)
 
 const CACHE_RADIUS = 11;            // Cinder Cache pickup radius
+
+// Ember Bloom (Level 11 probe): a level-local upgrade to the player's own
+// torch radius, granted by touching a one-time pickup. ~1.75x TORCH_RADIUS,
+// close to the already-shipped EMBER_RADIUS (155) hole size. Not part of
+// LEVEL_DEFAULTS -- it is read only where a level defines `emberBloom`.
+const EMBER_BLOOM_RADIUS = 149;         // upgraded player torch radius
+const EMBER_BLOOM_PICKUP_RADIUS = 14;   // touch radius for the pickup itself
+
+// Post-Bloom playtest revision: Ian's first Level 11 playtest called Ember
+// Bloom itself a hit, but noted the ordinary ember-drop mechanic (EMBER_RADIUS,
+// 155 -- barely bigger than EMBER_BLOOM_RADIUS's 149) had nothing left to add
+// once the player's own torch was already bloomed. EMBER_BLOOM_DROP_RADIUS is
+// the peak radius a *newly dropped* ember gets once the player has collected
+// Level 11's Ember Bloom pickup -- 210, ~1.41x EMBER_BLOOM_RADIUS and ~1.35x
+// EMBER_RADIUS, chosen as the smallest round value that reads as unmistakably
+// bigger than both at a glance. Only ever read where an ember's `bloomBoosted`
+// flag is set (see tryDropEmber/drawFog) -- levels 1-10 never set that flag,
+// so this constant has no effect on them.
+const EMBER_BLOOM_DROP_RADIUS = 210;
 
 // Per-level tunables fall back to these baseline values (the exact values
 // the first playtest ran with). fieldW/fieldH let a level use a larger
@@ -654,6 +674,153 @@ const LEVELS = [
       { x: 1400, y: 0,   w: 24,  h: 150 },  // vertical baffle
     ],
   },
+  {
+    name: "The Ember Bloom",
+    // Level 11 probe (0011-trail-of-embers-level-11-ember-bloom-probe-brief.md),
+    // REVISED after Ian's first manual playtest of the original compact
+    // 900x700 draft. His read: Ember Bloom itself landed well and should be
+    // kept exactly as-is (same pickup, same 149px upgraded radius, same
+    // instant/level-local behavior); seeing corridors and the beast through
+    // walls at the bigger radius is intentional progression, not a bug; the
+    // three-sided dead-end pocket creating anxiety even though the
+    // wall-ignoring beast can cross into it is correct, not a defect to
+    // design away; but the level should never have shrunk the playfield to
+    // get its difficulty, and the ember-drop mechanic had nothing left to
+    // add once the player's own torch was already bloomed (155px normal
+    // ember vs. 149px bloomed torch -- barely different). This revision:
+    //   - Field is now exactly 1800x1000, matching level 10's dimensions --
+    //     no smaller footprint than the rest of the back half of the game.
+    //     The extra space goes into a genuinely more complex hand-authored
+    //     maze (more bands, branches, loops, and misleading gaps), not into
+    //     spacing the old compact layout out.
+    //   - The three-sided calibration pocket from the original draft is
+    //     preserved in spirit (sealed north/west/east, open south, sitting
+    //     beside a landmark block, visible via the bloomed radius without
+    //     needing to be entered) -- unchanged as a design intent, just
+    //     re-authored at the new scale.
+    //   - Dropped embers now peak at EMBER_BLOOM_DROP_RADIUS (210px, ~1.4x
+    //     the bloomed torch) instead of the normal EMBER_RADIUS (155px) once
+    //     Ember Bloom has been collected this attempt -- see the
+    //     `bloomBoosted` flag in tryDropEmber/drawFog. Level-local and
+    //     one-directional: never active before pickup, never active on any
+    //     other level, always cleared on reset/restart/leaving the level.
+    //
+    // Six horizontal bands split the field into seven strips, climbed
+    // bottom-to-top, each strip mapped to one beat of the original
+    // progression:
+    //   - Strip 7 (y844-1000): normal-light opening. The band above it
+    //     offers its first choice: a real gap roughly ahead, and a
+    //     wider-looking decoy gap off to the east that only leads to a
+    //     sealed pocket -- a first, cheap "don't trust gap width" lesson,
+    //     failable for free since the beast is nowhere near this strip.
+    //   - Strip 6 (y684-820): calibration space. The preserved three-sided
+    //     dead-end pocket remains a secondary route-reading element. The
+    //     band above has a normal climb plus one narrow bail-out gap -- the level's one
+    //     reconnecting loop back down from strip 5.
+    //   - Strip 5 (y524-660): main maze, part 1 -- a two-baffle weave (pass
+    //     over, then under) leading to the bail-out gap and the climb out.
+    //   - Strip 4 (y364-500): main maze, part 2 / beast-pressure ramp. The
+    //     beast's start point sits inside this strip, and the only way
+    //     across is a full lateral crossing of its territory, threading one
+    //     wide weave baffle and one deliberately tight (30px) squeeze --
+    //     the level's one unavoidable exposed crossing.
+    //   - Strip 3 (y204-340): further route-reading. A landmark block gives
+    //     a loop-around choice, and the band above repeats the "which gap"
+    //     lesson from strip 7 with a different shape -- a real climb versus
+    //     a decoy that seals into a shallow pocket just off the final
+    //     approach, not the exit itself.
+    //   - Strip 1/2 (y0-180): exit sequence. One short lateral jog past the
+    //     strip-3 decoy's pocket, then a clean, readable dash to the circle
+    //     -- no new geometry trick in the final beat.
+    //
+    // Wall thickness stays at the 24px convention used on levels 4-10;
+    // gaps range from a deliberate 30px squeeze up to comfortable
+    // 150-200px main corridors, the same range used throughout levels 4-10.
+    // Tuning: beastSpeed/emberCooldownMs/emberLifetimeMs all left at
+    // LEVEL_DEFAULTS, same as the original draft -- this probe isolates
+    // radius/maze vs. pacing.
+    fieldW: 1800,
+    fieldH: 1000,
+    playerStart: { x: 70, y: 930 },
+    beastStart: { x: 1000, y: 430 },
+    safeZone: { x: 1730, y: 70, r: 28 },
+    emberBloom: { x: 250, y: 900 },
+    obstacles: [
+      // --- Strip 7 (start): orientation wall, clear of the start, the
+      //     Ember Bloom pickup, and the real climb ---
+      { x: 400, y: 920, w: 150, h: 24 },
+
+      // --- Band @820 (strip7/strip6) -- real gap x780-980; decoy gap
+      //     x1500-1700 leads only to a sealed pocket in strip 6 ---
+      { x: 0,    y: 820, w: 780,  h: 24 },
+      { x: 980,  y: 820, w: 520,  h: 24 },
+      { x: 1700, y: 820, w: 100,  h: 24 },
+
+      // --- Strip 6: decoy pocket (sealed on 3 sides, open south into the
+      //     decoy gap above) ---
+      { x: 1500, y: 684, w: 200, h: 24 },  // pocket roof
+      { x: 1500, y: 684, w: 24,  h: 136 }, // pocket west wall
+      { x: 1676, y: 684, w: 24,  h: 136 }, // pocket east wall
+
+      // --- Strip 6: landmark block ---
+      { x: 700, y: 720, w: 160, h: 70 },
+
+      // --- Strip 6: preserved calibration pocket (sealed north/west/east,
+      //     open south), retained as a secondary route-reading element. ---
+      { x: 1050, y: 684, w: 150, h: 24 },  // pocket roof
+      { x: 1050, y: 708, w: 24,  h: 52 },  // pocket west wall
+      { x: 1176, y: 708, w: 24,  h: 52 },  // pocket east wall
+
+      // --- Band @660 (strip6/strip5) -- main gap x600-750; narrow
+      //     (50px) bail-out gap x1400-1450 reconnects strip 5 to strip 6 ---
+      { x: 0,    y: 660, w: 600,  h: 24 },
+      { x: 750,  y: 660, w: 650,  h: 24 },
+      { x: 1450, y: 660, w: 350,  h: 24 },
+
+      // --- Strip 5 weave: pass over baffle A, then under baffle B ---
+      { x: 900,  y: 580, w: 24, h: 80 },  // baffle A, gap above y524-580
+      { x: 1150, y: 524, w: 24, h: 80 },  // baffle B, gap below y604-660
+
+      // --- Band @500 (strip5/strip4) -- gap x1500-1650 ---
+      { x: 0,    y: 500, w: 1500, h: 24 },
+      { x: 1650, y: 500, w: 150,  h: 24 },
+
+      // --- Strip 4 (beast pressure ramp): wide weave baffle near the
+      //     entry, then a deliberate 30px squeeze near the exit -- the
+      //     level's one unavoidable full-width crossing of the beast's
+      //     home strip ---
+      { x: 1300, y: 420, w: 24, h: 80 },  // baffle, gap above y364-420
+      { x: 900,  y: 364, w: 24, h: 60 },  // squeeze, top half
+      { x: 900,  y: 454, w: 24, h: 46 },  // squeeze, bottom half (gap y424-454, 30px)
+
+      // --- Band @340 (strip4/strip3) -- gap x150-300, far side of the
+      //     crossing from the strip5 entry ---
+      { x: 0,   y: 340, w: 150,  h: 24 },
+      { x: 300, y: 340, w: 1500, h: 24 },
+
+      // --- Strip 3: landmark block, loop around either side ---
+      { x: 500, y: 250, w: 220, h: 60 },
+
+      // --- Strip 3: one more turn between the landmark and the final gap
+      //     choice, so the stretch past the decoy isn't empty travel ---
+      { x: 1150, y: 204, w: 24, h: 80 },  // gap below y284-340
+
+      // --- Band @180 (strip3/strip1-2) -- real gap x1500-1650; decoy gap
+      //     x700-850 seals into a shallow pocket in the exit strip, off
+      //     the final approach ---
+      { x: 0,    y: 180, w: 700,  h: 24 },
+      { x: 850,  y: 180, w: 650,  h: 24 },
+      { x: 1650, y: 180, w: 150,  h: 24 },
+
+      // --- Exit strip: decoy pocket walls (uses the field's top edge as
+      //     its ceiling) ---
+      { x: 700, y: 0, w: 24, h: 180 },
+      { x: 826, y: 0, w: 24, h: 180 },
+
+      // --- Exit strip: final lateral jog before the circle ---
+      { x: 1650, y: 0, w: 24, h: 120 },
+    ],
+  },
 ];
 
 function isGateOpen() {
@@ -672,6 +839,7 @@ const fogCtx = fogCanvas.getContext("2d");
 
 const emberStatusEl = document.getElementById("ember-status");
 const cacheStatusEl = document.getElementById("cache-status");
+const bloomStatusEl = document.getElementById("bloom-status");
 const levelStatusEl = document.getElementById("level-status");
 const overlayMsgEl = document.getElementById("overlay-msg");
 const hudEl = document.getElementById("hud");
@@ -694,11 +862,16 @@ let emberDroppedThisFrame = false;
 const CACHE_PICKUP_MSG_MS = 900;
 const CACHE_SPENT_MSG_MS = 900;
 const CACHE_BURST_MS = 500;
+let lastEmberBloomAt = -Infinity;   // drives the "EMBER BLOOM" HUD message + pickup burst
+const EMBER_BLOOM_MSG_MS = 1200;
+const EMBER_BLOOM_BURST_MS = 500;
+let emberBloomActive = false;       // true once this attempt's Ember Bloom pickup is collected;
+                                     // gates the enhanced dropped-ember radius (see tryDropEmber)
 let elapsedMs = 0;
 
 let levelIndex = 0;
 let level; // current level config, resolved against LEVEL_DEFAULTS
-let player, beast, embers, caches, cacheBursts;
+let player, beast, embers, caches, cacheBursts, emberBloomPickup;
 
 function loadLevel(i) {
   levelIndex = i;
@@ -717,6 +890,7 @@ function resetGame() {
   player = {
     x: level.playerStart.x, y: level.playerStart.y, facing: 1,
     prevX: level.playerStart.x, prevY: level.playerStart.y,
+    lightR: TORCH_RADIUS, // Ember Bloom (Level 11) raises this; every reset restores the normal torch
   }; // facing is cosmetic only; prevX/Y track movement direction for one-way passages
   beast = {
     x: level.beastStart.x, y: level.beastStart.y,
@@ -729,9 +903,16 @@ function resetGame() {
   // any caches collected during the previous attempt.
   caches = (level.cinderCaches || []).map(c => ({ x: c.x, y: c.y }));
   cacheBursts = []; // { x, y, at } -- brief pickup-feedback rings, cleared on every reset
+  // Ember Bloom pickup only exists where a level's data lists it (only Level
+  // 11 today). Cloned fresh from level data every reset, same as caches --
+  // dying or restarting Level 11 restores the normal radius and requires
+  // recollecting the pickup, exactly like a Cinder Cache would.
+  emberBloomPickup = level.emberBloom ? { x: level.emberBloom.x, y: level.emberBloom.y } : null;
   lastEmberDropAt = -Infinity;
   lastCachePickupAt = -Infinity;
   lastChargeSpentAt = -Infinity;
+  lastEmberBloomAt = -Infinity;
+  emberBloomActive = false; // dying/restarting/leaving Level 11 clears the enhanced-ember state too
   hasCinderCharge = false; // no carryover between levels or across a restart, per design brief
   elapsedMs = 0;
   gameOver = false;
@@ -762,6 +943,12 @@ window.addEventListener("keydown", (e) => {
     if (num >= 1 && num <= LEVELS.length) {
       loadLevel(num - 1);
     }
+  }
+  // Single digits only reach levels 1-10 (0 doubling as 10); "-" is level 11.
+  // `code` keeps the physical Minus key usable on keyboard layouts where its
+  // produced character is not a hyphen.
+  if ((e.key === "-" || (e.code === "Minus" && !e.shiftKey)) && LEVELS.length >= 11) {
+    loadLevel(10);
   }
 });
 window.addEventListener("keyup", (e) => keys.delete(e.key.toLowerCase()));
@@ -1047,6 +1234,19 @@ function updatePlayer(dtSec, gp) {
   }
   cacheBursts = cacheBursts.filter(b => elapsedMs - b.at < CACHE_BURST_MS);
 
+  // Ember Bloom pickup (Level 11 probe): touching it once raises the
+  // player's own light radius to EMBER_BLOOM_RADIUS for the rest of this
+  // attempt. Instant, not eased -- the only changed variable is radius (see
+  // probe brief Section 5). Removed on pickup like a Cinder Cache; both
+  // reappear on the next resetGame() (death/restart), so the upgrade never
+  // carries into another level or across a restart.
+  if (emberBloomPickup && dist(player, emberBloomPickup) < PLAYER_RADIUS + EMBER_BLOOM_PICKUP_RADIUS) {
+    player.lightR = EMBER_BLOOM_RADIUS;
+    lastEmberBloomAt = elapsedMs;
+    emberBloomPickup = null;
+    emberBloomActive = true; // from here on, this attempt's dropped embers get the boosted radius
+  }
+
   const spaceIsDown = keys.has(" ");
   if (spaceIsDown && !spaceWasDown) {
     tryDropEmber();
@@ -1060,7 +1260,7 @@ function tryDropEmber() {
   if (cooldownReady) {
     // Normal drop: the stored charge, if any, is left untouched.
     lastEmberDropAt = elapsedMs;
-    embers.push({ x: player.x, y: player.y, droppedAt: elapsedMs });
+    embers.push({ x: player.x, y: player.y, droppedAt: elapsedMs, bloomBoosted: emberBloomActive });
     emberDroppedThisFrame = true;
     if (typeof playEmberTick === "function") playEmberTick();
   } else if (hasCinderCharge) {
@@ -1068,7 +1268,7 @@ function tryDropEmber() {
     // Do NOT change lastEmberDropAt, do NOT restart, extend, or reset the normal cooldown.
     hasCinderCharge = false;
     lastChargeSpentAt = elapsedMs;
-    embers.push({ x: player.x, y: player.y, droppedAt: elapsedMs, fromCharge: true });
+    embers.push({ x: player.x, y: player.y, droppedAt: elapsedMs, fromCharge: true, bloomBoosted: emberBloomActive });
     emberDroppedThisFrame = true;
     if (typeof playEmberTick === "function") playEmberTick();
   }
@@ -1214,6 +1414,25 @@ const CACHE_PAL = {
   k: "#5a2a10", // dark warm outline
   c: "#ff9a3c", // amber body
   w: "#fff6d0", // near-white pulsing core
+};
+
+// Ember Bloom pickup (Level 11 probe): a radiating sunburst/spark shape,
+// deliberately not a diamond (Cinder Cache) or a flame tongue (dropped
+// ember) -- diagonal points around a pure-white core read as "vision," not
+// "resource" or "bait."
+const EMBER_BLOOM_SPRITE = [
+  "..b.b..",
+  "...b...",
+  "b.cwc.b",
+  ".cwwwc.",
+  "b.cwc.b",
+  "...b...",
+  "..b.b..",
+];
+const EMBER_BLOOM_PAL = {
+  b: "#fff4c2", // bright pale-gold outer points
+  c: "#ffb84d", // warm amber mid glow
+  w: "#ffffff", // pure-white hot core -- unique among the game's sprites
 };
 
 // Brick masonry palette -- deliberately low-contrast (mortar and the two
@@ -1460,6 +1679,42 @@ function drawWorld() {
     ctx.globalAlpha = 1;
   }
 
+  // Ember Bloom pickup (Level 11 probe): a single pulsing sunburst, present
+  // only while level.emberBloom is defined and not yet collected. Same
+  // pulse/glow treatment as a Cinder Cache so it reads as "a positive
+  // pickup" using an established visual language, with its own sprite/
+  // palette (EMBER_BLOOM_SPRITE/PAL) so it's never confused for one.
+  if (emberBloomPickup) {
+    const pulse = 0.7 + 0.3 * Math.sin(elapsedMs / 220);
+    const glowR = PX * 10;
+    const glow = ctx.createRadialGradient(emberBloomPickup.x, emberBloomPickup.y, 0, emberBloomPickup.x, emberBloomPickup.y, glowR);
+    glow.addColorStop(0, `rgba(255,244,194,${0.6 * pulse})`);
+    glow.addColorStop(1, "rgba(255,244,194,0)");
+    ctx.fillStyle = glow;
+    ctx.beginPath();
+    ctx.arc(emberBloomPickup.x, emberBloomPickup.y, glowR, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.globalAlpha = pulse;
+    drawSprite(EMBER_BLOOM_SPRITE, EMBER_BLOOM_PAL, emberBloomPickup.x, emberBloomPickup.y, false);
+    ctx.globalAlpha = 1;
+  }
+
+  // Ember Bloom activation burst: a brief expanding, fading glow-pop at the
+  // moment the radius upgrade is granted. Purely cosmetic and self-clearing
+  // (EMBER_BLOOM_BURST_MS) -- the actual gameplay radius change is instant
+  // (see the pickup-collision block in updatePlayer); this is feedback only.
+  if (elapsedMs - lastEmberBloomAt < EMBER_BLOOM_BURST_MS) {
+    const t = (elapsedMs - lastEmberBloomAt) / EMBER_BLOOM_BURST_MS; // 0 -> 1
+    const r = PX * 6 + t * PX * 24;
+    ctx.globalAlpha = 1 - t;
+    ctx.strokeStyle = "#fff4c2";
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.arc(player.x, player.y, r, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.globalAlpha = 1;
+  }
+
   // embers (blocky flames on the ground, fade after they go cold)
   for (const e of embers) {
     const age = elapsedMs - e.droppedAt;
@@ -1516,7 +1771,7 @@ function drawFog() {
     fogCtx.fill();
   }
 
-  punchHole(player.x, player.y, TORCH_RADIUS);
+  punchHole(player.x, player.y, player.lightR);
   if (level.gate && isGateOpen()) {
     // Punch a hole at the beast's position to light it up when it triggers the gate.
     punchHole(beast.x, beast.y, TORCH_RADIUS);
@@ -1524,7 +1779,12 @@ function drawFog() {
   for (const e of embers) {
     const age = elapsedMs - e.droppedAt;
     const t = Math.max(0, 1 - age / level.emberLifetimeMs);
-    const r = EMBER_RADIUS * (0.35 + 0.65 * t); // shrinks as it cools
+    // Ember Bloom synergy (Level 11 only): an ember dropped after the player
+    // has collected that level's Ember Bloom pickup peaks at the larger
+    // EMBER_BLOOM_DROP_RADIUS instead of the normal EMBER_RADIUS. Same fade
+    // curve either way -- only the peak radius changes.
+    const peak = e.bloomBoosted ? EMBER_BLOOM_DROP_RADIUS : EMBER_RADIUS;
+    const r = peak * (0.35 + 0.65 * t); // shrinks as it cools
     if (t > 0 || age - level.emberLifetimeMs < EMBER_FADE_MS) {
       punchHole(e.x, e.y, Math.max(20, r));
     }
@@ -1541,12 +1801,19 @@ function drawDebug() {
   ctx.setLineDash([4, 4]);
 
   ctx.beginPath();
-  ctx.arc(player.x, player.y, TORCH_RADIUS, 0, Math.PI * 2);
+  ctx.arc(player.x, player.y, player.lightR, 0, Math.PI * 2);
   ctx.stroke();
 
   for (const e of embers) {
     ctx.beginPath();
-    ctx.arc(e.x, e.y, EMBER_RADIUS, 0, Math.PI * 2);
+    ctx.arc(e.x, e.y, e.bloomBoosted ? EMBER_BLOOM_DROP_RADIUS : EMBER_RADIUS, 0, Math.PI * 2);
+    ctx.stroke();
+  }
+
+  if (emberBloomPickup) {
+    ctx.strokeStyle = "rgba(255,244,194,0.8)";
+    ctx.beginPath();
+    ctx.arc(emberBloomPickup.x, emberBloomPickup.y, EMBER_BLOOM_PICKUP_RADIUS, 0, Math.PI * 2);
     ctx.stroke();
   }
 
@@ -1687,6 +1954,7 @@ function frame(ts) {
   } else {
     cacheStatusEl.textContent = "";
   }
+  bloomStatusEl.textContent = elapsedMs - lastEmberBloomAt < EMBER_BLOOM_MSG_MS ? "EMBER BLOOM" : "";
 
   requestAnimationFrame(frame);
 }

@@ -41,11 +41,11 @@ vm.createContext(sandbox);
 
 // Run the game script, then pull out what we need via an appended expression.
 const exports_ = vm.runInContext(
-  src + "\n;({ LEVELS, LEVEL_DEFAULTS, PLAYER_RADIUS, CACHE_RADIUS, circleRectCollide, W, H })",
+  src + "\n;({ LEVELS, LEVEL_DEFAULTS, PLAYER_RADIUS, CACHE_RADIUS, EMBER_BLOOM_PICKUP_RADIUS, EMBER_BLOOM_RADIUS, EMBER_BLOOM_DROP_RADIUS, EMBER_RADIUS, TORCH_RADIUS, circleRectCollide, W, H })",
   sandbox,
   { filename: "index.html<script>" }
 );
-const { LEVELS, LEVEL_DEFAULTS, PLAYER_RADIUS, CACHE_RADIUS, circleRectCollide, W, H } = exports_;
+const { LEVELS, LEVEL_DEFAULTS, PLAYER_RADIUS, CACHE_RADIUS, EMBER_BLOOM_PICKUP_RADIUS, EMBER_BLOOM_RADIUS, EMBER_BLOOM_DROP_RADIUS, EMBER_RADIUS, TORCH_RADIUS, circleRectCollide, W, H } = exports_;
 console.log(`script evaluated OK; ${LEVELS.length} levels; base field ${W}x${H}`);
 
 let failures = 0;
@@ -268,7 +268,47 @@ LEVELS.forEach((raw, i) => {
         `cinder cache ${ci + 1} reachable without using one-way passages (before commitment)`);
     }
   });
+
+  // Ember Bloom pickup (Level 11 probe): at most one per level, in the
+  // same style as the Cinder Cache checks above. The validator has no
+  // concept of light/visibility (see the probe brief), so this only
+  // sanity-checks the pickup's position and the light-radius constants,
+  // not anything about what the bloomed radius illuminates.
+  if (level.emberBloom) {
+    const b = level.emberBloom;
+    check(inBounds(b), "ember bloom pickup in bounds");
+    check(!level.obstacles.some(o => circleRectCollide(b.x, b.y, EMBER_BLOOM_PICKUP_RADIUS, o)),
+      "ember bloom pickup clear of obstacles");
+    check(bfsReachable(level, b, EMBER_BLOOM_PICKUP_RADIUS),
+      "ember bloom pickup reachable from player start (BFS, player-radius clearance)");
+    check(EMBER_BLOOM_RADIUS > TORCH_RADIUS,
+      `ember bloom radius (${EMBER_BLOOM_RADIUS}) is larger than the normal torch radius (${TORCH_RADIUS})`);
+
+  }
+
+  // Level 11 revision (post-first-playtest): the field must match level 10's
+  // dimensions exactly -- Ian's call was that the level should never have
+  // been smaller than the rest of the back half of the game. This is a
+  // structural/geometric check only; it says nothing about whether the
+  // larger maze is itself fair or fun (see README).
+  if (i === 10) {
+    const level10 = Object.assign({}, LEVEL_DEFAULTS, LEVELS[9]);
+    check(level.fieldW === level10.fieldW && level.fieldH === level10.fieldH,
+      `level 11 field (${level.fieldW}x${level.fieldH}) matches level 10's field (${level10.fieldW}x${level10.fieldH})`);
+  }
 });
+
+// Ember Bloom + dropped-ember synergy (Level 11 revision): once collected,
+// a newly dropped ember must peak at a radius unmistakably larger than the
+// player's own bloomed torch -- at least ~1.35x EMBER_BLOOM_RADIUS -- so the
+// ember-drop mechanic stays genuinely useful for route planning even after
+// the torch upgrade. This is a static constant-relationship check only; it
+// cannot verify runtime state transitions (see README for what's playtest-
+// gated instead).
+check(EMBER_BLOOM_DROP_RADIUS >= EMBER_BLOOM_RADIUS * 1.35,
+  `bloom-boosted ember radius (${EMBER_BLOOM_DROP_RADIUS}) is at least 1.35x the bloomed torch radius (${EMBER_BLOOM_RADIUS})`);
+check(EMBER_BLOOM_DROP_RADIUS > EMBER_RADIUS,
+  `bloom-boosted ember radius (${EMBER_BLOOM_DROP_RADIUS}) is larger than the normal ember radius (${EMBER_RADIUS})`);
 
 if (failures) { console.error(`\n${failures} check(s) FAILED`); process.exit(1); }
 console.log("\nall checks passed");
